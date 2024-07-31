@@ -5,16 +5,18 @@ import bodyParser from 'body-parser';
 const router = express.Router();
 router.use(bodyParser.json());
 
-router.get('/getAllCategories', async (req, res) => {
+router.get('/getAllReclamations', async(req, res) => {
   const page = parseInt(req.query.page as string || '1', 10);
   const pageSize = parseInt(req.query.pageSize as string || '10', 10);
   const offset = (page - 1) * pageSize;
 
   const query = `
-    SELECT SQL_CALC_FOUND_ROWS *
-    FROM categories 
-    LIMIT ?, ?`;
-  const countQuery = 'SELECT FOUND_ROWS() AS totalItems';
+  SELECT SQL_CALC_FOUND_ROWS sr.*, s.name AS salon_name
+  FROM salon_reclamacion sr
+  INNER JOIN salon s ON sr.id_salon = s.id_salon
+  LIMIT ?, ?;
+`;  
+const countQuery = 'SELECT FOUND_ROWS() AS totalItems';
 
   connection.query(query, [offset, pageSize], (error, results) => {
     if (error) {
@@ -31,25 +33,7 @@ router.get('/getAllCategories', async (req, res) => {
       }
 
       const totalItems = (countResults as any)[0].totalItems;
-
-      // Procesar los resultados para eliminar duplicados globalmente
-      const categoriesSet = new Set<string>();
-      const processedResults = Array.isArray(results) ? results.flatMap((row: any) => {
-        return row.categories.split(/\s*;\s*/).map((cat: string) => {
-          if (!categoriesSet.has(cat)) {
-            categoriesSet.add(cat);
-            return {
-              id_salon: row.id_salon,
-              category: cat,
-              destacado: row.destacado,
-              active: row.acitve // Corrige el nombre del campo aquí también si es necesario
-            };
-          }
-          return null;
-        }).filter((item: any) => item !== null);
-      }) : [];
-
-      res.json({ data: processedResults, totalItems });
+      res.json({ data: results, totalItems });
     });
   });
 });

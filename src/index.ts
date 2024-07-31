@@ -10,6 +10,9 @@ import Import from './controllers/import/import';
 import Administrators from './controllers/administrators/administrators';
 import Contact from './controllers/contact/contact';
 import ContactProffesional from './controllers/contact-proffesional/contact-proffesional'
+import Reclamations from './controllers/reclamations/reclamation';
+import Services from './controllers/services/services';
+
 
 const app = express();
 app.use(express.json());
@@ -32,8 +35,9 @@ app.use(function(req, res, next) {
   app.use('/import', Import);
   app.use('/administrators',Administrators);
   app.use ('/contact',Contact);
-  app.use ('/contact-proffesional',ContactProffesional
-  )
+  app.use ('/contact-proffesional',ContactProffesional);
+  app.use ('/reclamations',Reclamations);
+  app.use ('/services',Services);
 
   app.listen(3000, () => {
     console.log('Servidor iniciado en http://localhost:3000');
