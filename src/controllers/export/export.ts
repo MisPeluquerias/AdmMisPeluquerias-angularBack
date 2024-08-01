@@ -6,28 +6,31 @@ import ExcelJS from 'exceljs';
 const router = express.Router();
 router.use(bodyParser.json());
 
-router.get('/getAllSalon', async(req, res) => {
+router.get('/getAllSalon', async (req, res) => {
   const page = parseInt(req.query.page as string || '1', 10);
   const pageSize = parseInt(req.query.pageSize as string || '10', 10);
   const offset = (page - 1) * pageSize;
+  const search = req.query.search ? `%${req.query.search}%` : '%%';
 
   const query = `
-  SELECT 
+    SELECT 
       SQL_CALC_FOUND_ROWS 
       s.*,
-      GROUP_CONCAT(TRIM(REPLACE(c.categories, ' ;', '')) SEPARATOR ' ; ') AS categories
-  FROM 
+      GROUP_CONCAT(TRIM(REPLACE(c.categories, ' ;', '')) SEPARATOR '; ') AS categories
+    FROM 
       salon s
-  LEFT JOIN 
+    LEFT JOIN 
       categories c ON s.id_salon = c.id_salon
-  GROUP BY 
+    WHERE 
+      s.name LIKE ? OR s.email LIKE ? OR s.created_at LIKE ? OR s.phone LIKE ? OR s.active LIKE ? OR s.state LIKE ? OR c.categories LIKE ?
+    GROUP BY 
       s.id_salon
-  LIMIT ?, ?;
-`;
+    LIMIT ?, ?;
+  `;
 
   const countQuery = 'SELECT FOUND_ROWS() AS totalItems';
 
-  connection.query(query, [offset, pageSize], (error, results) => {
+  connection.query(query, [search, search, search, search, search, search, search, offset, pageSize], (error, results) => {
     if (error) {
       console.error('Error fetching data:', error);
       res.status(500).json({ error: 'An error occurred while fetching data' });

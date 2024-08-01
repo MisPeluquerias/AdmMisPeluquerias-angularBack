@@ -9,14 +9,16 @@ router.get('/getAllCategories', async (req, res) => {
   const page = parseInt(req.query.page as string || '1', 10);
   const pageSize = parseInt(req.query.pageSize as string || '10', 10);
   const offset = (page - 1) * pageSize;
+  const search = req.query.search ? `%${req.query.search}%` : '%%';
 
   const query = `
     SELECT SQL_CALC_FOUND_ROWS *
-    FROM categories 
+    FROM categories
+    WHERE categories LIKE ?
     LIMIT ?, ?`;
   const countQuery = 'SELECT FOUND_ROWS() AS totalItems';
 
-  connection.query(query, [offset, pageSize], (error, results) => {
+  connection.query(query, [search, offset, pageSize], (error, results) => {
     if (error) {
       console.error('Error fetching data:', error);
       res.status(500).json({ error: 'An error occurred while fetching data' });
@@ -42,7 +44,7 @@ router.get('/getAllCategories', async (req, res) => {
               id_salon: row.id_salon,
               category: cat,
               destacado: row.destacado,
-              active: row.acitve // Corrige el nombre del campo aquí también si es necesario
+              active: row.active // Corrige el nombre del campo aquí también si es necesario
             };
           }
           return null;

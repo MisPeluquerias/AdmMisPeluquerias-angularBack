@@ -5,25 +5,27 @@ import bodyParser from 'body-parser';
 const router = express.Router();
 router.use(bodyParser.json());
 
-router.get('/getAllServices', async(req, res) => {
+router.get('/getAllServices', async (req, res) => {
   const page = parseInt(req.query.page as string || '1', 10);
   const pageSize = parseInt(req.query.pageSize as string || '10', 10);
   const offset = (page - 1) * pageSize;
+  const search = req.query.search ? `%${req.query.search}%` : '%%';
 
   const query = `
-  SELECT SQL_CALC_FOUND_ROWS 
+    SELECT SQL_CALC_FOUND_ROWS 
       s.id_service, 
       s.name AS service_name, 
       GROUP_CONCAT(sn.name ORDER BY sn.name SEPARATOR ', ') AS subservices
-  FROM service s
-  INNER JOIN service_type sn ON s.id_service = sn.id_service
-  GROUP BY s.id_service
-  LIMIT ?, ?;
-`;
+    FROM service s
+    INNER JOIN service_type sn ON s.id_service = sn.id_service
+    WHERE s.name LIKE ? OR sn.name LIKE ?
+    GROUP BY s.id_service
+    LIMIT ?, ?;
+  `;
 
   const countQuery = 'SELECT FOUND_ROWS() AS totalItems';
 
-  connection.query(query, [offset, pageSize], (error, results) => {
+  connection.query(query, [search, search, offset, pageSize], (error, results) => {
     if (error) {
       console.error('Error fetching data:', error);
       res.status(500).json({ error: 'An error occurred while fetching data' });
@@ -42,5 +44,6 @@ router.get('/getAllServices', async(req, res) => {
     });
   });
 });
+
 
 export default router;
