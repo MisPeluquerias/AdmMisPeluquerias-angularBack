@@ -39,4 +39,5 @@ router.get('/getAllAdministrators', async (req, res) => {
   });
 });
 
+
 export default router;

@@ -94,7 +94,7 @@ router.get('/exportSalonsToExcel', async (req, res) => {
             { header: 'Imagen', key: 'image', width: 30 },
             { header: 'Acerca de Nosotros', key: 'about_us', width: 30 },
             { header: 'Puntuación Anterior', key: 'score_old', width: 15 },
-            { header: 'Horas Anteriores', key: 'hours_old', width: 30 },
+            { header: 'Horario', key: 'hours_old', width: 30 },
             { header: 'Código Postal Anterior', key: 'zip_code_old', width: 10 },
             { header: 'Resumen Anterior', key: 'overview_old', width: 30 },
             { header: 'Creado en', key: 'created_at', width: 20 },
@@ -135,6 +135,10 @@ router.get('/exportSalonsToExcel', async (req, res) => {
           });
 
           worksheet.getColumn('categories').eachCell((cell) => {
+            cell.protection = { locked: false };
+          });
+
+          worksheet.getColumn('hours_old').eachCell((cell) => {
             cell.protection = { locked: false };
           });
 
