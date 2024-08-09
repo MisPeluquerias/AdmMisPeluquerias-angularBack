@@ -15,7 +15,7 @@ const storage = multer.diskStorage({
     const uniqueSuffix = Date.now();
     const ext = path.extname(file.originalname);
     const baseName = path.basename(file.originalname, ext);
-    const newName = `Peluqueria-Coserty-MisPeluquerias-${uniqueSuffix}${ext}`;
+    const newName = `MisPeluquerias.com-${uniqueSuffix}${ext}`;
     cb(null, newName);
   }
 });
