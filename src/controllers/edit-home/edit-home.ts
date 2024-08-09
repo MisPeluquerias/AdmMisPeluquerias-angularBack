@@ -1,10 +1,10 @@
 import express from 'express';
-import multer from 'multer';
-import path from 'path';
 import connection from '../../db/db';
 import bodyParser from 'body-parser';
 import { RowDataPacket } from 'mysql2';
 import { Request, Response } from 'express';
+import mysql from 'mysql2';
+
 
 const router = express.Router();
 router.use(bodyParser.json());
@@ -321,6 +321,171 @@ router.put("/updateSalonHours/:id", async (req, res) => {
       });
     });
   });
+});
+
+
+
+router.post('/createSalon', async (req: Request, res: Response) => {
+  const {
+    id_city,
+    plus_code,
+    active,
+    state,
+    in_vacation,
+    name,
+    address,
+    latitud,
+    longitud,
+    email,
+    url,
+    phone,
+    map,
+    iframe,
+    image,
+    about_us,
+    score_old,
+    hours_old,
+    zip_code_old,
+    overview_old,
+    categories
+  } = req.body;
+
+  console.log('Datos recibidos:', req.body);
+
+  // Verificar si los datos requeridos están presentes
+  if (!name || !address || !id_city) {
+    console.log('Error: Missing required fields');
+    return res.status(400).json({ error: 'Name, address, and city are required fields' });
+  }
+
+  const insertSalonQuery = `
+    INSERT INTO salon (
+      id_city, plus_code, active, state, in_vacation, name, address, 
+      latitud, longitud, email, url, phone, map, iframe, image, about_us, 
+      score_old, hours_old, zip_code_old, overview_old
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+  `;
+
+  const insertCategoryQuery = `
+    INSERT INTO categories (id_salon, categories) VALUES (?, ?);
+  `;
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      console.log('Iniciando transacción...');
+
+      connection.beginTransaction((transactionError) => {
+        if (transactionError) {
+          console.error('Error starting transaction:', transactionError);
+          return reject(transactionError);
+        }
+
+        console.log('Ejecutando query de inserción de salón...');
+        console.log('Query:', insertSalonQuery);
+        console.log('Valores:', [
+          id_city,
+          plus_code,
+          active,
+          state,
+          in_vacation,
+          name,
+          address,
+          latitud,
+          longitud,
+          email,
+          url,
+          phone,
+          map,
+          iframe,
+          image,
+          about_us,
+          score_old,
+          hours_old,
+          zip_code_old,
+          overview_old
+        ]);
+
+        connection.query(
+          insertSalonQuery,
+          [
+            id_city,
+            plus_code,
+            active,
+            state,
+            in_vacation,
+            name,
+            address,
+            latitud,
+            longitud,
+            email,
+            url,
+            phone,
+            map,
+            iframe,
+            image,
+            about_us,
+            score_old,
+            hours_old,
+            zip_code_old,
+            overview_old
+          ],
+          (queryError, results) => {
+            if (queryError) {
+              console.error('Error inserting salon:', queryError);
+              connection.rollback(() => reject(queryError));
+              return;
+            }
+
+            console.log('Salón insertado exitosamente, ID:', (results as mysql.OkPacket).insertId);
+
+            // Casting de 'results' para acceder a insertId
+            const newSalonId = (results as mysql.OkPacket).insertId;
+
+            const categoryArray: string[] = categories.split(';').map((category: string) => category.trim());
+
+            console.log('Categorias a insertar:', categoryArray);
+
+            const categoryInserts = categoryArray.map((category: string) => {
+              return new Promise<void>((resolveInsert, rejectInsert) => {
+                console.log(`Insertando categoría: ${category} para el salón ID: ${newSalonId}`);
+                connection.query(insertCategoryQuery, [newSalonId, category], (insertError) => {
+                  if (insertError) {
+                    console.error('Error inserting category:', insertError);
+                    return rejectInsert(insertError);
+                  }
+                  resolveInsert();
+                });
+              });
+            });
+
+            Promise.all(categoryInserts)
+              .then(() => {
+                console.log('Categorías insertadas exitosamente, confirmando transacción...');
+                connection.commit((commitError) => {
+                  if (commitError) {
+                    console.error('Error committing transaction:', commitError);
+                    connection.rollback(() => reject(commitError));
+                    return;
+                  }
+
+                  resolve();
+                });
+              })
+              .catch((insertError) => {
+                console.error('Error inserting categories:', insertError);
+                connection.rollback(() => reject(insertError));
+              });
+          }
+        );
+      });
+    });
+
+    console.log('Transacción completada exitosamente.');
+    res.json({ message: 'Salon and categories created successfully' });
+  } catch (error) {
+    console.error('Error final:', error);
+    res.status(500).json({ error: 'An error occurred while creating the salon and categories' });
+  }
 });
 
 export default router;
