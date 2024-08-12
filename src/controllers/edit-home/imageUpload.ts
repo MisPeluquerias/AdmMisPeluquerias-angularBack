@@ -67,18 +67,36 @@ router.get('/getImages', (req, res) => {
   const salon_id = req.query.salon_id;
 
   if (!salon_id) {
-    return res.status(400).json({ error: 'salon_id is required' });
+      return res.status(400).json({ error: 'salon_id is required' });
   }
 
-  const query = 'SELECT * FROM file WHERE salon_id = ?';
+  connection.beginTransaction((err) => {
+      if (err) {
+          return res.status(500).json({ success: false, message: 'Error starting transaction', error: err });
+      }
 
-  connection.query(query, [salon_id], (err, results) => {
-    if (err) {
-      return res.status(500).json({ success: false, message: 'Error fetching images', error: err });
-    }
-    res.json({ success: true, data: results });
+      const query = 'SELECT * FROM file WHERE salon_id = ?';
+
+      connection.query(query, [salon_id], (err, results) => {
+          if (err) {
+              return connection.rollback(() => {
+                  res.status(500).json({ success: false, message: 'Error fetching images', error: err });
+              });
+          }
+
+          connection.commit((err) => {
+              if (err) {
+                  return connection.rollback(() => {
+                      res.status(500).json({ success: false, message: 'Error committing transaction', error: err });
+                  });
+              }
+
+              res.json({ success: true, data: results });
+          });
+      });
   });
 });
+
 
 router.put('/updatePrincipalImage', (req, res) => {
   const { file_id, file_principal } = req.body;
