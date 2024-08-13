@@ -16,7 +16,7 @@ import Reclamations from './controllers/reclamations/reclamation';
 import Services from './controllers/services/services';
 import EditHome from './controllers/edit-home/edit-home';
 import ImageUpload from './controllers/edit-home/imageUpload'; // Importa el nuevo router
-
+import ProfileUser from './controllers/profileUser/profileUser'
 const app = express();
 app.use(express.json());
 app.use(cors());
@@ -43,7 +43,8 @@ app.use('/contact-proffesional', ContactProffesional);
 app.use('/reclamations', Reclamations);
 app.use('/services', Services);
 app.use('/edithome', EditHome);
-app.use('/edithomeimages', ImageUpload); // Usa el nuevo router
+app.use('/edithomeimages', ImageUpload);
+app.use('/profile-user',ProfileUser);
 
 // Inicia el servidor en el puerto 3000
 app.listen(3000, () => {
