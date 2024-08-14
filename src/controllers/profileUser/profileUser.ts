@@ -162,5 +162,93 @@ router.get("/getCitiesByProvinceForProfile", async (req: Request, res: Response)
   );
 });
 
+router.put('/updateUser', async (req: Request, res: Response) => {
+  const { id_user, name, lastname, email, phone, address, id_city, id_province, permiso } = req.body;
+
+  // Validar que id_user esté presente
+  if (!id_user) {
+    return res.status(400).json({ error: 'id_user parameter is required' });
+  }
+
+  //console.log('id_user received:', id_user); // Verifica qué valor estás recibiendo
+
+  let decodedIdUser;
+  try {
+    // Si id_user es un token JWT, intenta decodificarlo. Si no, úsalo directamente.
+    if (typeof id_user === 'string' && id_user.split('.').length === 3) {
+      decodedIdUser = decodeToken(id_user); // Decodificar el token para obtener id_user
+      //console.log('Decoded ID User:', decodedIdUser); // Verifica si el ID se decodifica correctamente
+    } else {
+      decodedIdUser = id_user; // Si id_user no es un JWT, úsalo tal cual
+     // console.log('Using id_user directly:', decodedIdUser);
+    }
+  } catch (err) {
+    console.error('Error decoding token:', err);
+    return res.status(400).json({ error: 'Invalid token' });
+  }
+
+  // Iniciar la transacción
+  connection.beginTransaction((err) => {
+    if (err) {
+      console.error('Error starting transaction:', err);
+      return res.status(500).json({ error: 'Error starting transaction' });
+    }
+
+    // Construir la consulta de actualización
+    const query = `
+      UPDATE user 
+      SET 
+        name = ?, 
+        lastname = ?, 
+        email = ?, 
+        phone = ?, 
+        address = ?, 
+        id_city = ?, 
+        id_province = ?, 
+        permiso = ? 
+      WHERE id_user = ?;
+    `;
+
+    const queryParams = [
+      name, 
+      lastname, 
+      email, 
+      phone, 
+      address, 
+      id_city, 
+      id_province, 
+      permiso, 
+      decodedIdUser
+    ];
+
+    // Ejecutar la consulta
+    connection.query(query, queryParams, (error, results) => {
+      if (error) {
+        // En caso de error, revertir la transacción
+        connection.rollback(() => {
+          console.error('Error executing update query:', error);
+          res.status(500).json({ error: 'An error occurred while updating the user data' });
+        });
+        return;
+      }
+
+      // Confirmar la transacción
+      connection.commit((commitError) => {
+        if (commitError) {
+          // En caso de error durante el commit, revertir la transacción
+          connection.rollback(() => {
+            console.error('Error committing transaction:', commitError);
+            res.status(500).json({ error: 'An error occurred while committing the transaction' });
+          });
+          return;
+        }
+
+        // Enviar la respuesta exitosa
+        res.json({ message: 'User data updated successfully' });
+      });
+    });
+  });
+});
+
 
 export default router;
