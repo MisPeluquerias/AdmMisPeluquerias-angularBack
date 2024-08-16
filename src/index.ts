@@ -18,11 +18,12 @@ import EditHome from './controllers/edit-home/edit-home';
 import ImageUpload from './controllers/edit-home/imageUpload'; // Importa el nuevo router
 import ProfileUser from './controllers/profileUser/profileUser';
 import Aside from './controllers/aside/aside';
+import Header from './controllers/header/header'
 const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Servir archivos estáticos desde el directorio "uploads"
+
 app.use('/uploads', express.static(path.join(__dirname, '../dist/uploads')));
 
 app.use(function(req, res, next) {
@@ -47,8 +48,9 @@ app.use('/edithome', EditHome);
 app.use('/edithomeimages', ImageUpload);
 app.use('/profile-user',ProfileUser);
 app.use('/aside',Aside);
+app.use('/header',Header)
 
-// Inicia el servidor en el puerto 3000
+
 app.listen(3000, () => {
   console.log('Servidor iniciado en http://localhost:3000');
 });

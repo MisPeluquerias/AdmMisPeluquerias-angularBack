@@ -8,6 +8,7 @@ import bcrypt from 'bcrypt';
 import { OkPacket } from 'mysql2'; // Importa OkPacket
 import multer from 'multer';
 import path  from 'path';
+import fs from 'fs';
 
 const router = express.Router();
 router.use(bodyParser.json());
@@ -28,27 +29,48 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 // Ruta para manejar la carga de la foto de perfil
-router.put ('/uploadProfilePicture/:id_user', upload.single('profilePicture'),  async (req, res) => {
-  if (req.file) {
-    const fileUrl = `${req.protocol}://${req.get('host')}/uploads/profile-pictures/${req.file.filename}`;
-    const { id_user } = req.params;
+router.put('/uploadProfilePicture/:id_user', upload.single('profilePicture'), async (req, res) => {
+  const { id_user } = req.params;
 
-    if (!id_user) {
-      return res.status(400).json({ error: 'id_user is required' });
-    }
+  if (!id_user) {
+    return res.status(400).json({ error: 'id_user is required' });
+  }
 
-    const query = `
-      UPDATE user SET avatar_path = ? WHERE id_user = ?
-    `;
-
-    connection.query(query, [fileUrl, id_user], (err, result) => {
-      if (err) {
-        return res.status(500).json({ success: false, message: 'Error al guardar la información en la base de datos', error: err });
+  try {
+    // Consulta para obtener la ruta de la imagen existente
+    const selectQuery = `SELECT avatar_path FROM user WHERE id_user = ?`;
+    connection.query(selectQuery, [id_user], (selectErr, results: RowDataPacket[]) => {
+      if (selectErr) {
+        return res.status(500).json({ success: false, message: 'Error al obtener la información existente', error: selectErr });
       }
-      res.json({ success: true, message: 'Foto de perfil subida y datos guardados correctamente', fileUrl: fileUrl });
+
+      // Eliminar la imagen existente si existe
+      if (results.length > 0 && results[0].avatar_path) {
+        const existingImagePath = path.join(__dirname, '../../../dist', results[0].avatar_path.replace(req.protocol + '://' + req.get('host'), ''));
+        if (fs.existsSync(existingImagePath)) {
+          fs.unlinkSync(existingImagePath); // Elimina el archivo existente
+        }
+      }
+
+      // Guardar la nueva imagen
+      if (req.file) {
+        const fileUrl = `${req.protocol}://${req.get('host')}/uploads/profile-pictures/${req.file.filename}`;
+        const updateQuery = `UPDATE user SET avatar_path = ? WHERE id_user = ?`;
+
+        connection.query(updateQuery, [fileUrl, id_user], (updateErr) => {
+          if (updateErr) {
+            return res.status(500).json({ success: false, message: 'Error al guardar la nueva imagen en la base de datos', error: updateErr });
+          }
+
+          res.json({ success: true, message: 'Foto de perfil subida y guardada correctamente', fileUrl: fileUrl });
+        });
+      } else {
+        res.status(400).json({ success: false, message: 'No se pudo subir la foto de perfil' });
+      }
     });
-  } else {
-    res.status(400).json({ success: false, message: 'No se pudo subir la foto de perfil' });
+  } catch (err) {
+    console.error('Error durante la carga de la imagen:', err);
+    res.status(500).json({ success: false, message: 'Error durante la carga de la imagen', error: err });
   }
 });
 
