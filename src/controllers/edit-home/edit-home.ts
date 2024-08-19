@@ -386,7 +386,7 @@ router.post("/createSalon", async (req: Request, res: Response) => {
     categories,
   } = req.body;
 
-  console.log("Datos recibidos:", req.body);
+  //console.log("Datos recibidos:", req.body);
 
   // Verificar si los datos requeridos están presentes
   if (!name || !address || !id_city) {

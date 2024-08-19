@@ -163,5 +163,95 @@ router.get("/getCitiesByProvinceForNewClient", async (req: Request, res: Respons
 
 
 
+router.post("/addNewUser", async (req: Request, res: Response) => {
+  const {
+    name,
+    lastname,
+    email,
+    phone,
+    address,
+    id_province,
+    id_city,
+    dni,
+    permiso,
+    password
+  } = req.body;
+
+  console.log('datos recibidos', req.body);
+
+  // Validaciones básicas
+  if (!name || !lastname || !email || !phone || !address || !id_province || !id_city || !dni || !password || !permiso) {
+    console.log('Error: Uno o más campos están vacíos');
+    return res.status(400).json({ error: "All fields are required" });
+  }
+
+  // Iniciar transacción
+  connection.beginTransaction(async (transactionError) => {
+    if (transactionError) {
+      console.error("Error starting transaction:", transactionError);
+      return res.status(500).json({ error: "Failed to start transaction" });
+    }
+
+    try {
+      // Encriptar la contraseña
+      const hashedPassword = await bcrypt.hash(password, 10);
+      console.log('Contraseña encriptada:', hashedPassword);
+
+      // Insertar el nuevo usuario
+      const insertUserQuery = `
+        INSERT INTO user (name, lastname, permiso, email, phone, address, id_province, id_city, dni, password)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `;
+      console.log('Ejecutando consulta SQL:', insertUserQuery);
+      console.log('Valores:', [name, lastname, permiso, email, phone, address, id_province, id_city, dni, hashedPassword]);
+
+      connection.query(
+        insertUserQuery,
+        [name, lastname, permiso, email, phone, address, id_province, id_city, dni, hashedPassword],
+        (insertError, insertResults: OkPacket) => {
+          if (insertError) {
+            // Manejo del error de entrada duplicada
+            if (insertError.code === 'ER_DUP_ENTRY') {
+              console.log("Error inserting new user:", insertError.sqlMessage);
+              return connection.rollback(() => {
+                res.status(409).json({ error: "User with this email already exists" });
+              });
+            }
+            console.log("Error inserting new user:", insertError);
+            return connection.rollback(() => {
+              res.status(500).json({ error: "Failed to insert new user" });
+            });
+          }
+
+          const newUserId = insertResults.insertId;
+          console.log('Nuevo usuario creado con ID:', newUserId);
+
+          // Confirmar la transacción
+          connection.commit((commitError) => {
+            if (commitError) {
+              return connection.rollback(() => {
+                console.error("Error committing transaction:", commitError);
+                res.status(500).json({ error: "Failed to commit transaction" });
+              });
+            }
+
+            res.status(201).json({
+              success: true,
+              message: "New user created successfully",
+              userId: newUserId
+            });
+          });
+        }
+      );
+    } catch (error) {
+      console.error("Error during user creation:", error);
+      return connection.rollback(() => {
+        res.status(500).json({ error: "Failed to create new user" });
+      });
+    }
+  });
+});
+
+
 
 export default router;
