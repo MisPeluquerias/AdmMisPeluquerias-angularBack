@@ -19,6 +19,8 @@ import ImageUpload from './controllers/edit-home/imageUpload'; // Importa el nue
 import ProfileUser from './controllers/profileUser/profileUser';
 import Aside from './controllers/aside/aside';
 import Header from './controllers/header/header'
+import NewClient from './controllers/new-client/new-client';
+
 const app = express();
 app.use(express.json());
 app.use(cors());
@@ -48,7 +50,8 @@ app.use('/edithome', EditHome);
 app.use('/edithomeimages', ImageUpload);
 app.use('/profile-user',ProfileUser);
 app.use('/aside',Aside);
-app.use('/header',Header)
+app.use('/header',Header);
+app.use('/new-client',NewClient)
 
 
 app.listen(3000, () => {

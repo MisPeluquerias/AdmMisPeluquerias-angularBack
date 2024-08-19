@@ -12,13 +12,13 @@ router.use(express.json());
 router.post('/', async (req: Request, res: Response) => {
     const { email, password } = req.body;
 
-    console.log(`Intento de login con email: ${email}`); // Debugging
+    //console.log(`Intento de login con email: ${email}`); // Debugging
 
     if (!email || !password) {
         return res.status(400).json({ message: 'Email y contraseña son requeridos' });
     }
 
-    const query = `SELECT * FROM user WHERE email = ?;`;
+    const query = `SELECT * FROM user WHERE email = ? AND active = 1;`;
 
     try {
         const [rows]: any = await connection.promise().query(query, [email]);

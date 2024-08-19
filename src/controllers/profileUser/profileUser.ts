@@ -127,7 +127,6 @@ router.get('/getDataUser', async (req, res) => {
           });
           return;
         }
-
         // Enviar los resultados como respuesta
         res.json({ data: results });
       });
@@ -187,6 +186,8 @@ router.get("/getProvincesForProfile", async (req: Request, res: Response) => {
     res.json({ data: results });
   });
 });
+
+
 
 router.get("/getCitiesByProvinceForProfile", async (req: Request, res: Response) => {
   const id_province = req.query.id_province;
@@ -369,6 +370,67 @@ router.put('/updateUserPassword', async (req, res) => {
         res.status(500).json({ error: 'Error processing request' });
       });
     }
+  });
+});
+
+router.patch('/desactivateAccount/:id_user', async (req: Request, res: Response) => {
+  const { id_user } = req.params;
+
+  // Validar que id_user esté presente
+  if (!id_user) {
+    return res.status(400).json({ error: 'id_user is required' });
+  }
+
+  let decodedIdUser;
+  try {
+    // Decodificar el token para obtener id_user
+    decodedIdUser = decodeToken(id_user as string); // Asegúrate de que decodeToken devuelve el ID del usuario
+  } catch (err) {
+    console.error('Error decoding token:', err);
+    return res.status(400).json({ error: 'Invalid token' });
+  }
+
+  // Iniciar la transacción
+  connection.beginTransaction((err) => {
+    if (err) {
+      console.error('Error starting transaction:', err);
+      return res.status(500).json({ error: 'Error starting transaction' });
+    }
+
+    // Construir la consulta de actualización
+    const query = `UPDATE user SET active = 0 WHERE id_user = ?`;
+
+    // Ejecutar la consulta
+    connection.query(query, [decodedIdUser], (error, results: OkPacket) => {
+      if (error) {
+        // En caso de error, revertir la transacción
+        connection.rollback(() => {
+          console.error('Error executing update query:', error);
+          res.status(500).json({ error: 'An error occurred while updating the user status' });
+        });
+        return;
+      }
+
+      // Confirmar la transacción
+      connection.commit((commitError) => {
+        if (commitError) {
+          // En caso de error durante el commit, revertir la transacción
+          connection.rollback(() => {
+            console.error('Error committing transaction:', commitError);
+            res.status(500).json({ error: 'An error occurred while committing the transaction' });
+          });
+          return;
+        }
+
+        // Verificar si algún registro fue actualizado
+        if (results.affectedRows === 0) {
+          return res.status(404).json({ error: 'User not found or already deactivated' });
+        }
+
+        // Enviar la respuesta exitosa
+        res.json({ message: 'User account deactivated successfully' });
+      });
+    });
   });
 });
 
