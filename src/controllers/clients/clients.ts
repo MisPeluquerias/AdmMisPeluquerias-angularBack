@@ -12,10 +12,11 @@ router.get('/getAllClients', async (req, res) => {
   const search = req.query.search ? `%${req.query.search}%` : '%%';
 
   const query = `
-    SELECT SQL_CALC_FOUND_ROWS * 
-    FROM user 
-    WHERE name LIKE ? OR email LIKE ? OR created_at LIKE ? OR phone LIKE ?
-    LIMIT ?, ?`;
+  SELECT SQL_CALC_FOUND_ROWS * 
+  FROM user 
+  WHERE (name LIKE ? OR email LIKE ? OR created_at LIKE ? OR phone LIKE ?)
+  AND permiso = 'client'
+  LIMIT ?, ?`;
 
   const countQuery = 'SELECT FOUND_ROWS() AS totalItems';
 
