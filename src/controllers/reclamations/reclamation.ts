@@ -6,37 +6,69 @@ const router = express.Router();
 router.use(bodyParser.json());
 
 router.get('/getAllReclamations', async (req, res) => {
-  const page = parseInt(req.query.page as string || '1', 10);
-  const pageSize = parseInt(req.query.pageSize as string || '10', 10);
-  const offset = (page - 1) * pageSize;
-  const search = req.query.search ? `%${req.query.search}%` : '%%';
+  const { page = '1', pageSize = '3' } = req.query as { page?: string, pageSize?: string }; // Cambié el valor predeterminado de pageSize a '3'
+  const pageNumber = parseInt(page, 10);
+  const pageSizeNumber = parseInt(pageSize, 10);
+  const offset = (pageNumber - 1) * pageSizeNumber;
 
   const query = `
-    SELECT SQL_CALC_FOUND_ROWS sr.*, s.name AS salon_name
+    SELECT sr.*, u.name AS user_name, u.email
     FROM salon_reclamacion sr
-    INNER JOIN salon s ON sr.id_salon = s.id_salon
-    WHERE sr.created_at LIKE ? OR s.name LIKE ? OR sr.observation LIKE ?
+    INNER JOIN user u ON sr.id_user = u.id_user
     LIMIT ?, ?;
   `;
 
-  const countQuery = 'SELECT FOUND_ROWS() AS totalItems';
+  const countQuery = 'SELECT COUNT(*) AS totalItems FROM salon_reclamacion';
 
-  connection.query(query, [search, search, search, offset, pageSize], (error, results) => {
-    if (error) {
-      console.error('Error fetching data:', error);
-      res.status(500).json({ error: 'An error occurred while fetching data' });
-      return;
+  // Iniciar la transacción
+  connection.beginTransaction(err => {
+    if (err) {
+      console.error('Error starting transaction:', err);
+      return res.status(500).json({ error: 'An error occurred while starting transaction' });
     }
 
-    connection.query(countQuery, (countError, countResults) => {
-      if (countError) {
-        console.error('Error fetching count:', countError);
-        res.status(500).json({ error: 'An error occurred while fetching data count' });
-        return;
+    // Primera consulta: obtener datos de reclamaciones
+    connection.query(query, [offset, pageSizeNumber], (error, results) => {
+      if (error) {
+        return connection.rollback(() => {
+          console.error('Error fetching data:', error);
+          res.status(500).json({ error: 'An error occurred while fetching data' });
+        });
       }
 
-      const totalItems = (countResults as any)[0].totalItems;
-      res.json({ data: results, totalItems });
+      // Segunda consulta: contar el total de registros
+      connection.query(countQuery, (countError, countResults) => {
+        if (countError) {
+          return connection.rollback(() => {
+            console.error('Error fetching count:', countError);
+            res.status(500).json({ error: 'An error occurred while fetching data count' });
+          });
+        }
+
+        // Si todo fue bien, commit y envío de los resultados
+        connection.commit(commitError => {
+          if (commitError) {
+            return connection.rollback(() => {
+              console.error('Error committing transaction:', commitError);
+              res.status(500).json({ error: 'An error occurred while committing transaction' });
+            });
+          }
+
+          // Manejo seguro de resultados
+          const totalItems = (countResults as any)[0].totalItems;
+          const totalPages = Math.ceil(totalItems / pageSizeNumber);
+
+          res.json({
+            data: results,
+            pagination: {
+              page: pageNumber,
+              pageSize: pageSizeNumber,
+              totalItems,
+              totalPages,
+            },
+          });
+        });
+      });
     });
   });
 });

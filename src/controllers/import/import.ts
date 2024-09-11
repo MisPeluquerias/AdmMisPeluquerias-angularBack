@@ -131,6 +131,38 @@ router.post("/updateExcel", upload.single("file"), async (req, res) => {
         deleted_at: row.getCell(24).value,
       };
 
+      if (salon.deleted_at && salon.deleted_at === 1) {  // Puedes ajustar la condición según cómo manejes los valores eliminados
+        try {
+          // Eliminar categorías asociadas
+          const deleteCategoriesQuery = `DELETE FROM categories WHERE id_salon = ?`;
+          await new Promise((resolve, reject) => {
+            connection.query(deleteCategoriesQuery, [salon.id_salon], (error, results) => {
+              if (error) {
+                console.error("Error deleting categories:", error);
+                return reject(error);
+              }
+              resolve(results);
+            });
+          });
+      
+          // Eliminar el salón después de eliminar las categorías asociadas
+          const deleteSalonQuery = `DELETE FROM salon WHERE id_salon = ?`;
+          await new Promise((resolve, reject) => {
+            connection.query(deleteSalonQuery, [salon.id_salon], (error, results) => {
+              if (error) {
+                console.error("Error deleting salon:", error);
+                return reject(error);
+              }
+              resolve(results);
+            });
+          });
+      
+          continue; // Pasar a la siguiente fila en el archivo Excel
+        } catch (error) {
+          return res.status(500).json({ error: "Error deleting salon data" });
+        }
+      }
+
       const categories = row.getCell(25).value;
 
       const salonQuery = `
@@ -290,6 +322,7 @@ router.post("/addExcel", upload.single("file"), async (req, res) => {
         updated_at: row.getCell(23).value,
         deleted_at: row.getCell(24).value,
       };
+      
 
       const categories = row.getCell(25).value;
 

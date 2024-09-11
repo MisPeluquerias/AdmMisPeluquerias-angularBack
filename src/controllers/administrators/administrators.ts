@@ -40,4 +40,95 @@ router.get('/getAllAdministrators', async (req, res) => {
 });
 
 
+router.get("/searchEmailInLive", async (req, res) => {
+  try {
+    const { email } = req.query;
+    if (!email) {
+      return res.status(400).json({ error: "El parámetro 'name' es requerido." });
+    }
+    // Iniciar la transacción
+    await new Promise((resolve, reject) => {
+      connection.beginTransaction((err) => {
+        if (err) return reject(err);
+        resolve(undefined);
+      });
+    });
+
+
+    const query = "SELECT email FROM user WHERE email LIKE ? AND permiso != 'admin'";
+    
+
+    connection.query(query, [`%${email}%`, `%${email}%`], (error, results) => {
+      if (error) {
+        console.error("Error al buscar la ciudad:", error);
+        return connection.rollback(() => {
+          res.status(500).json({ error: "Error al buscar cliente." });
+        });
+      }
+
+      connection.commit((err) => {
+        if (err) {
+          console.error("Error al hacer commit:", err);
+          return connection.rollback(() => {
+            res.status(500).json({ error: "Error al buscar cliente." });
+          });
+        }
+
+        res.json(results);
+      });
+    });
+  } catch (err) {
+    console.error("Error al buscar cliente:", err);
+    res.status(500).json({ error: "Error al buscar la ciudad." });
+  }
+});
+
+
+router.put('/addNewAdmin', (req, res) => {
+  const { email } = req.body;
+  //console.log('Email recibido en el servidor:', email);
+
+  if (!email) {
+      return res.status(400).json({ message: 'El correo electrónico es requerido.' });
+  }
+
+  connection.beginTransaction((err) => {
+      if (err) {
+          return res.status(500).json({ message: 'Error al iniciar la transacción.', error: err });
+      }
+
+      // Consulta para actualizar el permiso
+      const query = 'UPDATE user SET permiso = ? WHERE email = ?';
+      connection.query(query, ['admin', email], (err, results) => {
+          if (err) {
+              return connection.rollback(() => {
+                  res.status(500).json({ message: 'Error al actualizar el rol del usuario.', error: err });
+              });
+          }
+
+          const affectedRows = (results as any).affectedRows;
+
+          if (affectedRows === 0) {
+              return connection.rollback(() => {
+                  res.status(404).json({ message: 'Usuario no encontrado.' });
+              });
+          }
+
+          // Confirmar la transacción
+          connection.commit((err) => {
+              if (err) {
+                  return connection.rollback(() => {
+                      res.status(500).json({ message: 'Error al confirmar la transacción.', error: err });
+                  });
+              }
+
+              res.status(200).json({ message: 'El usuario ha sido promovido a administrador.' });
+          });
+      });
+  });
+});
+
+
+
+
 export default router;

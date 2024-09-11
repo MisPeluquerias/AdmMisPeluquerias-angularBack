@@ -10,6 +10,7 @@ import path  from 'path';
 import fs from 'fs';
 
 
+
 const router = express.Router();
 router.use(bodyParser.json());
 
@@ -76,41 +77,23 @@ const storage = multer.diskStorage({
   });
 
 
-router.get("/getProvincesForNewClient", async (req: Request, res: Response) => {
+  router.get("/getProvinces", async (req: Request, res: Response) => {
+    const query = `SELECT id_province, name FROM province`;
   
-    connection.beginTransaction((transactionError) => {
-        if (transactionError) {
-            console.error("Error starting transaction:", transactionError);
-            return res.status(500).json({ error: "Failed to start transaction" });
-        }
-
-        const query = `SELECT id_province, name FROM province`;
+    connection.query(query, (queryError, results: RowDataPacket[]) => {
+      if (queryError) {
+        console.error("Error fetching provinces:", queryError);
+        return res
+          .status(500)
+          .json({ error: "An error occurred while fetching the provinces" });
+      }
   
-        connection.query(query, (queryError, results: RowDataPacket[]) => {
-            if (queryError) {
-                return connection.rollback(() => {
-                    console.error("Error fetching provinces:", queryError);
-                    res.status(500).json({ error: "An error occurred while fetching the provinces" });
-                });
-            }
-  
-            connection.commit((commitError) => {
-                if (commitError) {
-                    return connection.rollback(() => {
-                        console.error("Error committing transaction:", commitError);
-                        res.status(500).json({ error: "Failed to commit transaction" });
-                    });
-                }
-
-                res.json({ data: results });
-            });
-        });
+      res.json({ data: results });
     });
-});
+  });
 
-
-
-router.get("/getCitiesByProvinceForNewClient", async (req: Request, res: Response) => {
+  
+  router.get("/getCitiesByProvinceForEditClient", async (req: Request, res: Response) => {
     const id_province = req.query.id_province;
 
     if (!id_province) {
@@ -161,97 +144,94 @@ router.get("/getCitiesByProvinceForNewClient", async (req: Request, res: Respons
     });
 });
 
+router.put('/updateClient/:id_user', (req, res) => {
+  const { id_user } = req.params;
+  const { name, lastname, email, phone, address, id_province, id_city, dni, password } = req.body;
 
+  const query = `
+      UPDATE user
+      SET 
+          name=?, 
+          lastname=?, 
+          email=?, 
+          phone=?, 
+          address=?, 
+          id_province=?, 
+          id_city=?, 
+          dni=?, 
+          password=?
+      WHERE id_user=?;
+  `;
 
-router.post("/addNewUser", async (req: Request, res: Response) => {
-  const {
-    name,
-    lastname,
-    email,
-    phone,
-    address,
-    id_province,
-    id_city,
-    dni,
-    permiso,
-    password
-  } = req.body;
+  connection.query(query, [name, lastname, email, phone, address, id_province, id_city, dni, password, id_user], (error) => {
+      if (error) {
+          console.error('Error actualizando cliente:', error.message);
+          return res.status(500).json({ message: 'Error actualizando cliente' });
+      }
 
-  console.log('datos recibidos', req.body);
-
-  // Validaciones básicas
-  if (!name || !lastname || !email || !phone || !address || !id_province || !id_city || !dni || !password || !permiso) {
-    console.log('Error: Uno o más campos están vacíos');
-    return res.status(400).json({ error: "All fields are required" });
-  }
-
-  // Iniciar transacción
-  connection.beginTransaction(async (transactionError) => {
-    if (transactionError) {
-      console.error("Error starting transaction:", transactionError);
-      return res.status(500).json({ error: "Failed to start transaction" });
-    }
-
-    try {
-      // Encriptar la contraseña
-      const hashedPassword = await bcrypt.hash(password, 10);
-      console.log('Contraseña encriptada:', hashedPassword);
-
-      // Insertar el nuevo usuario
-      const insertUserQuery = `
-        INSERT INTO user (name, lastname, permiso, email, phone, address, id_province, id_city, dni, password)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `;
-      console.log('Ejecutando consulta SQL:', insertUserQuery);
-      console.log('Valores:', [name, lastname, permiso, email, phone, address, id_province, id_city, dni, hashedPassword]);
-
-      connection.query(
-        insertUserQuery,
-        [name, lastname, permiso, email, phone, address, id_province, id_city, dni, hashedPassword],
-        (insertError, insertResults: OkPacket) => {
-          if (insertError) {
-            // Manejo del error de entrada duplicada
-            if (insertError.code === 'ER_DUP_ENTRY') {
-              console.log("Error inserting new user:", insertError.message);
-              return connection.rollback(() => {
-                res.status(409).json({ error: "User with this email already exists" });
-              });
-            }
-            console.log("Error inserting new user:", insertError.message);
-            return connection.rollback(() => {
-              res.status(500).json({ error: "Failed to insert new user" });
-            });
-          }
-
-          const newUserId = insertResults.insertId;
-          console.log('Nuevo usuario creado con ID:', newUserId);
-
-          // Confirmar la transacción
-          connection.commit((commitError) => {
-            if (commitError) {
-              return connection.rollback(() => {
-                console.error("Error committing transaction:", commitError);
-                res.status(500).json({ error: "Failed to commit transaction" });
-              });
-            }
-
-            res.status(201).json({
-              success: true,
-              message: "New user created successfully",
-              userId: newUserId
-            });
-          });
-        }
-      );
-    } catch (error) {
-      console.error("Error during user creation:", error);
-      return connection.rollback(() => {
-        res.status(500).json({ error: "Failed to create new user" });
-      });
-    }
+      res.json({ message: 'Cliente actualizado correctamente' });
   });
 });
 
 
 
-export default router;
+
+router.get("/getClientById", async (req: Request, res: Response) => {
+  const id_user = req.query.id_user;
+
+  if (!id_user) {
+    return res.status(400).json({ error: "id_salon is required" });
+  }
+
+  const query = `
+    SELECT * FROM user WHERE id_user = ? AND permiso = 'client'
+  `;
+
+  try {
+    connection.beginTransaction(async (transactionError) => {
+      if (transactionError) {
+        console.error("Error starting transaction:", transactionError);
+        return res.status(500).json({
+          error: "An error occurred while starting the transaction",
+        });
+      }
+
+      connection.query(query, [id_user], (queryError, results: RowDataPacket[]) => {
+        if (queryError) {
+          console.error("Error fetching salon:", queryError);
+          return connection.rollback(() => {
+            res.status(500).json({
+              error: "An error occurred while fetching the salon data",
+            });
+          });
+        }
+
+        if (results.length === 0) {
+          return connection.rollback(() => {
+            res.status(404).json({ message: "Salon not found" });
+          });
+        }
+
+        connection.commit((commitError) => {
+          if (commitError) {
+            console.error("Error committing transaction:", commitError);
+            return connection.rollback(() => {
+              res.status(500).json({
+                error: "An error occurred while committing the transaction",
+              });
+            });
+          }
+
+          res.json({ data: results[0] });
+        });
+      });
+    });
+  } catch (err) {
+    console.error("Unexpected error:", err);
+    res.status(500).json({ error: "An unexpected error occurred" });
+  }
+});
+
+
+
+  export default router;

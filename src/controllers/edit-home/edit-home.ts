@@ -86,6 +86,8 @@ router.get("/getSalonById", async (req: Request, res: Response) => {
   });
 });
 
+
+
 router.put("/updateSalon", async (req: Request, res: Response) => {
   const {
     id_salon,

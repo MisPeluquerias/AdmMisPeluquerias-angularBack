@@ -10,16 +10,42 @@ router.get('/getAllSalon', async (req, res) => {
   const pageSize = parseInt(req.query.pageSize as string || '10', 10);
   const offset = (page - 1) * pageSize;
   const search = req.query.search ? `%${req.query.search}%` : '%%';
+  const filterState = req.query.filterState ? req.query.filterState.toString() : '%%';
+  const filterActive = req.query.filterActive === 'true' ? '1' : '0';
 
-  const query = `
+  let query = `
     SELECT SQL_CALC_FOUND_ROWS * 
     FROM salon 
-    WHERE name LIKE ? OR email LIKE ? OR phone LIKE ? OR state LIKE ?
-    LIMIT ?, ?`;
+    WHERE (name LIKE ? OR email LIKE ? OR phone LIKE ? OR state LIKE ?)
+  `;
+
+  if (req.query.filterActive) {
+    query += ' AND active = ?';
+  }
+
+  if (req.query.filterState && req.query.filterState !== '%%') {
+    query += ' AND state = ?';
+  }
+
+  // Aquí los valores deben ser sin comillas
+  query += ' LIMIT ?, ?';
 
   const countQuery = 'SELECT FOUND_ROWS() AS totalItems';
 
-  connection.query(query, [search, search, search, search, offset, pageSize], (error, results) => {
+  const queryParams: any[] = [search, search, search, search];
+  
+  if (req.query.filterActive) {
+    queryParams.push(filterActive);
+  }
+
+  if (req.query.filterState && req.query.filterState !== '%%') {
+    queryParams.push(filterState);
+  }
+
+  // Aquí no se necesita convertir a string, deben ser números
+  queryParams.push(offset, pageSize);
+
+  connection.query(query, queryParams, (error, results) => {
     if (error) {
       console.error('Error fetching data:', error);
       res.status(500).json({ error: 'An error occurred while fetching data' });
@@ -38,5 +64,6 @@ router.get('/getAllSalon', async (req, res) => {
     });
   });
 });
+
 
 export default router;
