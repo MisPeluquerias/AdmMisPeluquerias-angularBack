@@ -74,6 +74,7 @@ const storage = multer.diskStorage({
     }
   });
 
+
   router.get("/getProvinces", async (req: Request, res: Response) => {
     const query = `SELECT id_province, name FROM province`;
   
@@ -88,6 +89,7 @@ const storage = multer.diskStorage({
       res.json({ data: results });
     });
   });
+
 
   router.get("/getCitiesByProvinceForEditAdmin", async (req: Request, res: Response) => {
     const id_province = req.query.id_province;
@@ -139,6 +141,7 @@ const storage = multer.diskStorage({
         });
     });
 });
+
 
 
 router.put('/updateAdmin/:id_user', (req, res) => {

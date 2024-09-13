@@ -289,11 +289,182 @@ router.put('/updateOwner/:id_user', (req, res) => {
   });
 
 
-
-
+  router.get("/searchSalonInLive", async (req, res) => {
+    try {
+      const { name } = req.query;
+      if (!name) {
+        return res.status(400).json({ error: "El parámetro 'name' es requerido." });
+      }
   
+      // Iniciar la transacción
+      connection.beginTransaction((err) => {
+        if (err) {
+          console.error("Error al iniciar la transacción:", err);
+          return res.status(500).json({ error: "Error al iniciar la transacción." });
+        }
+  
+        const query = "SELECT id_salon, name FROM salon WHERE name LIKE ?";
+  
+        connection.query(query, [`%${name}%`], (error, results) => {
+          if (error) {
+            console.error("Error al buscar salon:", error);
+            return connection.rollback(() => {
+              res.status(500).json({ error: "Error al buscar salon." });
+            });
+          }
+  
+          connection.commit((err) => {
+            if (err) {
+              console.error("Error al hacer commit:", err);
+              return connection.rollback(() => {
+                res.status(500).json({ error: "Error al buscar salon." });
+              });
+            }
+            res.json(results);
+          });
+        });
+      });
+    } catch (err) {
+      console.error("Error al buscar salon:", err);
+      res.status(500).json({ error: "Error al buscar el salon." });
+    }
+  });
 
+  router.put('/updateUserSalon/:id_user_salon', (req: Request, res: Response) => {
+    const { id_user_salon } = req.params;
+    const { id_salon } = req.body;
 
+    if (!id_user_salon || !id_salon) {
+        return res.status(400).json({ error: "id_user_salon and id_salon are required" });
+    }
+
+    connection.beginTransaction((err) => {
+        if (err) {
+            console.error('Error starting transaction:', err);
+            return res.status(500).json({ error: "Error starting transaction" });
+        }
+
+        const query = `
+            UPDATE user_salon 
+            SET id_salon = ? 
+            WHERE id_user_salon = ?;
+        `;
+
+        connection.query(query, [id_salon, id_user_salon], (error, results: OkPacket) => {
+            if (error) {
+                return connection.rollback(() => {
+                    console.error('Error updating user_salon:', error.message);
+                    res.status(500).json({ error: "Error updating user_salon" });
+                });
+            }
+
+            if (results.affectedRows === 0) {
+                return connection.rollback(() => {
+                    res.status(404).json({ message: "user_salon not found or no changes made" });
+                });
+            }
+
+            connection.commit((commitErr) => {
+                if (commitErr) {
+                    return connection.rollback(() => {
+                        console.error('Error committing transaction:', commitErr);
+                        res.status(500).json({ error: "Error committing transaction" });
+                    });
+                }
+
+                res.json({ message: "user_salon updated successfully" });
+            });
+        });
+    });
+});
+
+// Delete user_salon
+router.delete('/deleteUserSalon/:id_user_salon', (req: Request, res: Response) => {
+    const { id_user_salon } = req.params;
+
+    if (!id_user_salon) {
+        return res.status(400).json({ error: "id_user_salon is required" });
+    }
+
+    connection.beginTransaction((err) => {
+        if (err) {
+            console.error('Error starting transaction:', err);
+            return res.status(500).json({ error: "Error starting transaction" });
+        }
+
+        const query = `
+            DELETE FROM user_salon 
+            WHERE id_user_salon = ?;
+        `;
+
+        connection.query(query, [id_user_salon], (error, results: OkPacket) => {
+            if (error) {
+                return connection.rollback(() => {
+                    console.error('Error deleting user_salon:', error.message);
+                    res.status(500).json({ error: "Error deleting user_salon" });
+                });
+            }
+
+            if (results.affectedRows === 0) {
+                return connection.rollback(() => {
+                    res.status(404).json({ message: "user_salon not found" });
+                });
+            }
+
+            connection.commit((commitErr) => {
+                if (commitErr) {
+                    return connection.rollback(() => {
+                        console.error('Error committing transaction:', commitErr);
+                        res.status(500).json({ error: "Error committing transaction" });
+                    });
+                }
+
+                res.json({ message: "user_salon deleted successfully" });
+            });
+        });
+    });
+});
+
+// Add user_salon
+router.post('/addUserSalon', (req: Request, res: Response) => {
+    const { id_user, id_salon } = req.body;
+
+    if (!id_user || !id_salon) {
+        return res.status(400).json({ error: "id_user and id_salon are required" });
+    }
+
+    connection.beginTransaction((err) => {
+        if (err) {
+            console.error('Error starting transaction:', err);
+            return res.status(500).json({ error: "Error starting transaction" });
+        }
+
+        const query = `
+            INSERT INTO user_salon (id_user, id_salon)
+            VALUES (?, ?);
+        `;
+
+        connection.query(query, [id_user, id_salon], (error, results: OkPacket) => {
+            if (error) {
+                return connection.rollback(() => {
+                    console.error('Error inserting into user_salon:', error.message);
+                    res.status(500).json({ error: "Error inserting into user_salon" });
+                });
+            }
+
+            connection.commit((commitErr) => {
+                if (commitErr) {
+                    return connection.rollback(() => {
+                        console.error('Error committing transaction:', commitErr);
+                        res.status(500).json({ error: "Error committing transaction" });
+                    });
+                }
+
+                res.json({ message: "user_salon added successfully", id_user_salon: results.insertId });
+            });
+        });
+    });
+});
 
 
 export default router;

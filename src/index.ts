@@ -23,6 +23,7 @@ import editClient from './controllers/edit-client/edit-client'
 import editAdmin from './controllers/edit-administrator/edit-administrator';
 import ownerSalon from './controllers/owner-salon/owner-salon';
 import editOwner from './controllers/edit-owner/edit-owner';
+import editCity from './controllers/edit-city/edit-city'
 
 const app = express();
 app.use(express.json());
@@ -60,6 +61,7 @@ app.use('/edit-client',editClient);
 app.use('/edit-admin',editAdmin);
 app.use('/owner-salon',ownerSalon);
 app.use('/edit-owner',editOwner);
+app.use('/edit-city',editCity);
  
 
 

@@ -28,6 +28,7 @@ const edit_client_1 = __importDefault(require("./controllers/edit-client/edit-cl
 const edit_administrator_1 = __importDefault(require("./controllers/edit-administrator/edit-administrator"));
 const owner_salon_1 = __importDefault(require("./controllers/owner-salon/owner-salon"));
 const edit_owner_1 = __importDefault(require("./controllers/edit-owner/edit-owner"));
+const edit_city_1 = __importDefault(require("./controllers/edit-city/edit-city"));
 const app = (0, express_1.default)();
 app.use(express_1.default.json());
 app.use((0, cors_1.default)());
@@ -59,6 +60,7 @@ app.use('/edit-client', edit_client_1.default);
 app.use('/edit-admin', edit_administrator_1.default);
 app.use('/owner-salon', owner_salon_1.default);
 app.use('/edit-owner', edit_owner_1.default);
+app.use('/edit-city', edit_city_1.default);
 app.listen(3000, () => {
     console.log('Servidor iniciado en http://localhost:3000');
 });

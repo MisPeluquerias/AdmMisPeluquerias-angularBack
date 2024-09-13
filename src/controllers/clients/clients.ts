@@ -40,4 +40,5 @@ router.get('/getAllClients', async (req, res) => {
   });
 });
 
+
 export default router;
