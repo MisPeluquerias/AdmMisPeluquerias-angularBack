@@ -18,7 +18,8 @@ router.post('/', async (req: Request, res: Response) => {
         return res.status(400).json({ message: 'Email y contraseña son requeridos' });
     }
 
-    const query = `SELECT * FROM user WHERE email = ? AND active = 1;`;
+    const query = `SELECT * FROM user WHERE email = ? AND active = 1 AND (permiso = 'salon' OR permiso = 'admin')`;
+
 
     try {
         const [rows]: any = await connection.promise().query(query, [email]);

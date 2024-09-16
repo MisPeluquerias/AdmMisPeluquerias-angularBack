@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const db_1 = __importDefault(require("../../db/db")); // Ajusta esta ruta según tu estructura de directorios
 const body_parser_1 = __importDefault(require("body-parser"));
+const bcrypt_1 = __importDefault(require("bcrypt"));
 const multer_1 = __importDefault(require("multer"));
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
@@ -129,31 +130,71 @@ router.get("/getCitiesByProvinceForEditOwner", (req, res) => __awaiter(void 0, v
         });
     });
 }));
-router.put('/updateOwner/:id_user', (req, res) => {
+router.put('/updateOwner/:id_user', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id_user } = req.params;
     const { name, lastname, email, phone, address, id_province, id_city, dni, password } = req.body;
-    const query = `
-        UPDATE user
-        SET 
-            name=?, 
-            lastname=?, 
-            email=?, 
-            phone=?, 
-            address=?,  
-            id_province=?, 
-            id_city=?, 
-            dni=?, 
-            password=?
-        WHERE id_user=?;
-    `;
-    db_1.default.query(query, [name, lastname, email, phone, address, id_province, id_city, dni, password, id_user], (error) => {
-        if (error) {
-            console.error('Error actualizando cliente:', error.message);
-            return res.status(500).json({ message: 'Error actualizando cliente' });
+    // Iniciar transacción
+    db_1.default.beginTransaction((transactionError) => __awaiter(void 0, void 0, void 0, function* () {
+        if (transactionError) {
+            console.error("Error al iniciar la transacción:", transactionError);
+            return res.status(500).json({ message: 'Error al iniciar la transacción' });
         }
-        res.json({ message: 'Cliente actualizado correctamente' });
-    });
-});
+        try {
+            // Si se proporciona una nueva contraseña, la ciframos
+            let hashedPassword = null;
+            if (password) {
+                const saltRounds = 10;
+                hashedPassword = yield bcrypt_1.default.hash(password, saltRounds);
+            }
+            // Actualización de la consulta SQL
+            const query = `
+              UPDATE user
+              SET 
+                  name=?, 
+                  lastname=?, 
+                  email=?, 
+                  phone=?, 
+                  address=?,  
+                  id_province=?, 
+                  id_city=?, 
+                  dni=?,
+                  ${hashedPassword ? 'password=?,' : ''} 
+                  updated_at = NOW()
+              WHERE id_user=?;
+          `;
+            const params = [name, lastname, email, phone, address, id_province, id_city, dni];
+            if (hashedPassword) {
+                params.push(hashedPassword);
+            }
+            params.push(id_user);
+            // Ejecutar la consulta
+            db_1.default.query(query, params, (queryError) => {
+                if (queryError) {
+                    console.error("Error al actualizar el cliente:", queryError);
+                    return db_1.default.rollback(() => {
+                        res.status(500).json({ message: 'Error al actualizar el cliente' });
+                    });
+                }
+                // Si todo va bien, hacemos commit a la transacción
+                db_1.default.commit((commitError) => {
+                    if (commitError) {
+                        console.error("Error al hacer commit:", commitError);
+                        return db_1.default.rollback(() => {
+                            res.status(500).json({ message: 'Error al hacer commit de la transacción' });
+                        });
+                    }
+                    res.json({ message: 'Cliente actualizado correctamente' });
+                });
+            });
+        }
+        catch (error) {
+            console.error("Error durante la transacción:", error.message);
+            return db_1.default.rollback(() => {
+                res.status(500).json({ message: 'Error al procesar la transacción' });
+            });
+        }
+    }));
+}));
 router.get("/getOwnerById", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const id_user = req.query.id_user;
     if (!id_user) {

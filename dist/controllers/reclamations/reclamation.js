@@ -23,11 +23,17 @@ router.get('/getAllReclamations', (req, res) => __awaiter(void 0, void 0, void 0
     const pageSizeNumber = parseInt(pageSize, 10);
     const offset = (pageNumber - 1) * pageSizeNumber;
     const query = `
-    SELECT sr.*, u.name AS user_name, u.email
-    FROM salon_reclamacion sr
-    INNER JOIN user u ON sr.id_user = u.id_user
-    LIMIT ?, ?;
-  `;
+  SELECT sr.*, 
+         u.name AS user_name, 
+         u.email, 
+         c.name AS city_name, 
+         p.name AS province_name
+  FROM salon_reclamacion sr
+  INNER JOIN user u ON sr.id_user = u.id_user
+  INNER JOIN city c ON sr.id_city = c.id_city
+  INNER JOIN province p ON c.id_province = p.id_province
+  LIMIT ?, ?;
+`;
     const countQuery = 'SELECT COUNT(*) AS totalItems FROM salon_reclamacion';
     // Iniciar la transacción
     db_1.default.beginTransaction(err => {

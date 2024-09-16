@@ -16,6 +16,7 @@ function decodeTokenPermiso(token: string): any | null {
   }
 }
 
+
 router.post('/', (req: Request, res: Response) => {
   const { permiso } = req.body; // Espera recibir el token de permiso en el cuerpo de la solicitud
   const decoded = decodeTokenPermiso(permiso);
@@ -26,5 +27,38 @@ router.post('/', (req: Request, res: Response) => {
     res.status(400).json({ message: 'Token de permiso inválido' });
   }
 });
+
+router.get('/permiso-aside', (req: Request, res: Response) => {
+  const permiso = req.query.permiso as string; // Obtiene el token desde la URL
+
+  if (!permiso) {
+    return res.status(400).json({ message: 'Token de permiso no proporcionado' });
+  }
+
+  const decoded = decodeTokenPermiso(permiso);
+
+  if (decoded && decoded.permiso) {
+    res.json({ permiso: decoded.permiso });
+  } else {
+    res.status(400).json({ message: 'Token de permiso inválido' });
+  }
+});
+
+router.get('/permiso-home', (req: Request, res: Response) => {
+  const permiso = req.query.permiso as string; // Obtiene el token desde la URL
+
+  if (!permiso) {
+    return res.status(400).json({ message: 'Token de permiso no proporcionado' });
+  }
+
+  const decoded = decodeTokenPermiso(permiso);
+
+  if (decoded && decoded.permiso) {
+    res.json({ permiso: decoded.permiso });
+  } else {
+    res.status(400).json({ message: 'Token de permiso inválido' });
+  }
+});
+
 
 export default router;

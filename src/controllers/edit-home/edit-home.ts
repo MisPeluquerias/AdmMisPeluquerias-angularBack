@@ -114,8 +114,6 @@ router.put("/updateSalon", async (req: Request, res: Response) => {
     categories,
   } = req.body;
 
-  console.log("Datos recibidos:", req.body);
-
   if (!id_salon) {
     return res.status(400).json({ error: "id_salon is required" });
   }
@@ -204,46 +202,62 @@ router.put("/updateSalon", async (req: Request, res: Response) => {
                   return;
                 }
 
-                const categoryArray: string[] = categories
-                  .split(";")
-                  .map((category: string) => category.trim());
+                if (categories && categories.trim() !== "") {
+                  const categoryArray: string[] = categories
+                    .split(";")
+                    .map((category: string) => category.trim());
 
-                const categoryInserts = categoryArray.map(
-                  (category: string) => {
-                    return new Promise<void>((resolveInsert, rejectInsert) => {
-                      connection.query(
-                        insertCategoryQuery,
-                        [id_salon, category],
-                        (insertError) => {
-                          if (insertError) {
-                            return rejectInsert(insertError);
+                  const categoryInserts = categoryArray.map(
+                    (category: string) => {
+                      return new Promise<void>((resolveInsert, rejectInsert) => {
+                        connection.query(
+                          insertCategoryQuery,
+                          [id_salon, category],
+                          (insertError) => {
+                            if (insertError) {
+                              return rejectInsert(insertError);
+                            }
+                            resolveInsert();
                           }
-                          resolveInsert();
-                        }
-                      );
-                    });
-                  }
-                );
-
-                Promise.all(categoryInserts)
-                  .then(() => {
-                    connection.commit((commitError) => {
-                      if (commitError) {
-                        console.error(
-                          "Error committing transaction:",
-                          commitError
                         );
-                        connection.rollback(() => reject(commitError));
-                        return;
-                      }
+                      });
+                    }
+                  );
 
-                      resolve();
+                  Promise.all(categoryInserts)
+                    .then(() => {
+                      connection.commit((commitError) => {
+                        if (commitError) {
+                          console.error(
+                            "Error committing transaction:",
+                            commitError
+                          );
+                          connection.rollback(() => reject(commitError));
+                          return;
+                        }
+
+                        resolve();
+                      });
+                    })
+                    .catch((insertError) => {
+                      console.error("Error inserting categories:", insertError);
+                      connection.rollback(() => reject(insertError));
                     });
-                  })
-                  .catch((insertError) => {
-                    console.error("Error inserting categories:", insertError);
-                    connection.rollback(() => reject(insertError));
+                } else {
+                  // Si no hay categorías, simplemente se hace commit
+                  connection.commit((commitError) => {
+                    if (commitError) {
+                      console.error(
+                        "Error committing transaction:",
+                        commitError
+                      );
+                      connection.rollback(() => reject(commitError));
+                      return;
+                    }
+
+                    resolve();
                   });
+                }
               }
             );
           }
@@ -251,13 +265,14 @@ router.put("/updateSalon", async (req: Request, res: Response) => {
       });
     });
 
-    res.json({ message: "Salon and categories updated successfully" });
+    res.json({ message: "Salon updated successfully" });
   } catch (error) {
     res.status(500).json({
       error: "An error occurred while updating the salon and categories",
     });
   }
 });
+
 
 router.get("/getProvinces", async (req: Request, res: Response) => {
   const query = `SELECT id_province, name FROM province`;

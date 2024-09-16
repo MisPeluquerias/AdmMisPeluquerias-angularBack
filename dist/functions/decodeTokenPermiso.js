@@ -29,4 +29,30 @@ router.post('/', (req, res) => {
         res.status(400).json({ message: 'Token de permiso inválido' });
     }
 });
+router.get('/permiso-aside', (req, res) => {
+    const permiso = req.query.permiso; // Obtiene el token desde la URL
+    if (!permiso) {
+        return res.status(400).json({ message: 'Token de permiso no proporcionado' });
+    }
+    const decoded = decodeTokenPermiso(permiso);
+    if (decoded && decoded.permiso) {
+        res.json({ permiso: decoded.permiso });
+    }
+    else {
+        res.status(400).json({ message: 'Token de permiso inválido' });
+    }
+});
+router.get('/permiso-home', (req, res) => {
+    const permiso = req.query.permiso; // Obtiene el token desde la URL
+    if (!permiso) {
+        return res.status(400).json({ message: 'Token de permiso no proporcionado' });
+    }
+    const decoded = decodeTokenPermiso(permiso);
+    if (decoded && decoded.permiso) {
+        res.json({ permiso: decoded.permiso });
+    }
+    else {
+        res.status(400).json({ message: 'Token de permiso inválido' });
+    }
+});
 exports.default = router;

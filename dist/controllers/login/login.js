@@ -26,7 +26,7 @@ router.post('/', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     if (!email || !password) {
         return res.status(400).json({ message: 'Email y contraseña son requeridos' });
     }
-    const query = `SELECT * FROM user WHERE email = ? AND active = 1;`;
+    const query = `SELECT * FROM user WHERE email = ? AND active = 1 AND (permiso = 'salon' OR permiso = 'admin')`;
     try {
         const [rows] = yield db_1.default.promise().query(query, [email]);
         const resultado = rows;

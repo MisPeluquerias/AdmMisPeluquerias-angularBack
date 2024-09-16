@@ -84,7 +84,6 @@ router.get("/getSalonById", (req, res) => __awaiter(void 0, void 0, void 0, func
 }));
 router.put("/updateSalon", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id_salon, id_city, plus_code, active, state, in_vacation, name, address, latitud, longitud, email, url, phone, map, iframe, image, about_us, score_old, hours_old, zip_code_old, overview_old, categories, } = req.body;
-    console.log("Datos recibidos:", req.body);
     if (!id_salon) {
         return res.status(400).json({ error: "id_salon is required" });
     }
@@ -160,21 +159,38 @@ router.put("/updateSalon", (req, res) => __awaiter(void 0, void 0, void 0, funct
                             db_1.default.rollback(() => reject(deleteError));
                             return;
                         }
-                        const categoryArray = categories
-                            .split(";")
-                            .map((category) => category.trim());
-                        const categoryInserts = categoryArray.map((category) => {
-                            return new Promise((resolveInsert, rejectInsert) => {
-                                db_1.default.query(insertCategoryQuery, [id_salon, category], (insertError) => {
-                                    if (insertError) {
-                                        return rejectInsert(insertError);
-                                    }
-                                    resolveInsert();
+                        if (categories && categories.trim() !== "") {
+                            const categoryArray = categories
+                                .split(";")
+                                .map((category) => category.trim());
+                            const categoryInserts = categoryArray.map((category) => {
+                                return new Promise((resolveInsert, rejectInsert) => {
+                                    db_1.default.query(insertCategoryQuery, [id_salon, category], (insertError) => {
+                                        if (insertError) {
+                                            return rejectInsert(insertError);
+                                        }
+                                        resolveInsert();
+                                    });
                                 });
                             });
-                        });
-                        Promise.all(categoryInserts)
-                            .then(() => {
+                            Promise.all(categoryInserts)
+                                .then(() => {
+                                db_1.default.commit((commitError) => {
+                                    if (commitError) {
+                                        console.error("Error committing transaction:", commitError);
+                                        db_1.default.rollback(() => reject(commitError));
+                                        return;
+                                    }
+                                    resolve();
+                                });
+                            })
+                                .catch((insertError) => {
+                                console.error("Error inserting categories:", insertError);
+                                db_1.default.rollback(() => reject(insertError));
+                            });
+                        }
+                        else {
+                            // Si no hay categorías, simplemente se hace commit
                             db_1.default.commit((commitError) => {
                                 if (commitError) {
                                     console.error("Error committing transaction:", commitError);
@@ -183,16 +199,12 @@ router.put("/updateSalon", (req, res) => __awaiter(void 0, void 0, void 0, funct
                                 }
                                 resolve();
                             });
-                        })
-                            .catch((insertError) => {
-                            console.error("Error inserting categories:", insertError);
-                            db_1.default.rollback(() => reject(insertError));
-                        });
+                        }
                     });
                 });
             });
         });
-        res.json({ message: "Salon and categories updated successfully" });
+        res.json({ message: "Salon updated successfully" });
     }
     catch (error) {
         res.status(500).json({

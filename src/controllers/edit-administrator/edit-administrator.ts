@@ -144,36 +144,96 @@ const storage = multer.diskStorage({
 
 
 
-router.put('/updateAdmin/:id_user', (req, res) => {
-    const { id_user } = req.params;
-    const {  permiso, name, lastname, email, phone, address, id_province, id_city, dni, password,} = req.body;
+router.put('/updateAdmin/:id_user', async (req, res) => {
+  const { id_user } = req.params;
+  const {
+    permiso,
+    name,
+    lastname,
+    email,
+    phone,
+    address,
+    id_province,
+    id_city,
+    dni,
+    password,
+  } = req.body;
 
-    const query = `
+  try {
+    let hashedPassword = password;
+
+    // Solo encriptamos la contraseña si fue enviada en la solicitud
+    if (password) {
+      const saltRounds = 10; // Número de rondas para generar el salt
+      hashedPassword = await bcrypt.hash(password, saltRounds);
+    }
+
+    // Iniciando la transacción
+    connection.beginTransaction((transactionError) => {
+      if (transactionError) {
+        console.error('Error iniciando la transacción:', transactionError.message);
+        return res.status(500).json({ message: 'Error iniciando la transacción' });
+      }
+
+      const query = `
         UPDATE user
         SET 
-            permiso=?,
-            name=?, 
-            lastname=?, 
-            email=?, 
-            phone=?, 
-            address=?, 
-            id_province=?, 
-            id_city=?, 
-            dni=?, 
-            password=?
-        
-        WHERE id_user=?;
-    `;
-  
-    connection.query(query, [permiso ,name, lastname, email, phone, address, id_province, id_city, dni, password, id_user], (error) => {
+          permiso = ?,
+          name = ?, 
+          lastname = ?, 
+          email = ?, 
+          phone = ?, 
+          address = ?, 
+          id_province = ?, 
+          id_city = ?, 
+          dni = ?, 
+          password = ?
+        WHERE id_user = ?;
+      `;
+
+      connection.query(query, [
+        permiso,
+        name,
+        lastname,
+        email,
+        phone,
+        address,
+        id_province,
+        id_city,
+        dni,
+        hashedPassword,
+        id_user,
+      ], (error) => {
         if (error) {
-            console.error('Error actualizando cliente:', error.message);
-            return res.status(500).json({ message: 'Error actualizando cliente' });
+          console.error('Error actualizando cliente:', error.message);
+          return connection.rollback(() => {
+            res.status(500).json({ message: 'Error actualizando cliente' });
+          });
         }
-  
-        res.json({ message: 'Cliente actualizado correctamente' });
+
+        // Si todo va bien, hacemos commit a la transacción
+        connection.commit((commitError) => {
+          if (commitError) {
+            console.error('Error haciendo commit de la transacción:', commitError.message);
+            return connection.rollback(() => {
+              res.status(500).json({ message: 'Error haciendo commit de la transacción' });
+            });
+          }
+
+          res.json({ message: 'Cliente actualizado correctamente' });
+        });
+      });
     });
-  });
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      console.error('Error encriptando la contraseña:', error.message);
+      return res.status(500).json({ message: 'Error actualizando cliente' });
+    } else {
+      console.error('Error encriptando la contraseña:', error);
+      return res.status(500).json({ message: 'Error desconocido al actualizar cliente' });
+    }
+  }
+});
 
 
 

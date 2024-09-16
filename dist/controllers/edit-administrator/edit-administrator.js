@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const db_1 = __importDefault(require("../../db/db")); // Ajusta esta ruta según tu estructura de directorios
 const body_parser_1 = __importDefault(require("body-parser"));
+const bcrypt_1 = __importDefault(require("bcrypt"));
 const multer_1 = __importDefault(require("multer"));
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
@@ -129,33 +130,80 @@ router.get("/getCitiesByProvinceForEditAdmin", (req, res) => __awaiter(void 0, v
         });
     });
 }));
-router.put('/updateAdmin/:id_user', (req, res) => {
+router.put('/updateAdmin/:id_user', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id_user } = req.params;
     const { permiso, name, lastname, email, phone, address, id_province, id_city, dni, password, } = req.body;
-    const query = `
+    try {
+        let hashedPassword = password;
+        // Solo encriptamos la contraseña si fue enviada en la solicitud
+        if (password) {
+            const saltRounds = 10; // Número de rondas para generar el salt
+            hashedPassword = yield bcrypt_1.default.hash(password, saltRounds);
+        }
+        // Iniciando la transacción
+        db_1.default.beginTransaction((transactionError) => {
+            if (transactionError) {
+                console.error('Error iniciando la transacción:', transactionError.message);
+                return res.status(500).json({ message: 'Error iniciando la transacción' });
+            }
+            const query = `
         UPDATE user
         SET 
-            permiso=?,
-            name=?, 
-            lastname=?, 
-            email=?, 
-            phone=?, 
-            address=?, 
-            id_province=?, 
-            id_city=?, 
-            dni=?, 
-            password=?
-        
-        WHERE id_user=?;
-    `;
-    db_1.default.query(query, [permiso, name, lastname, email, phone, address, id_province, id_city, dni, password, id_user], (error) => {
-        if (error) {
-            console.error('Error actualizando cliente:', error.message);
+          permiso = ?,
+          name = ?, 
+          lastname = ?, 
+          email = ?, 
+          phone = ?, 
+          address = ?, 
+          id_province = ?, 
+          id_city = ?, 
+          dni = ?, 
+          password = ?
+        WHERE id_user = ?;
+      `;
+            db_1.default.query(query, [
+                permiso,
+                name,
+                lastname,
+                email,
+                phone,
+                address,
+                id_province,
+                id_city,
+                dni,
+                hashedPassword,
+                id_user,
+            ], (error) => {
+                if (error) {
+                    console.error('Error actualizando cliente:', error.message);
+                    return db_1.default.rollback(() => {
+                        res.status(500).json({ message: 'Error actualizando cliente' });
+                    });
+                }
+                // Si todo va bien, hacemos commit a la transacción
+                db_1.default.commit((commitError) => {
+                    if (commitError) {
+                        console.error('Error haciendo commit de la transacción:', commitError.message);
+                        return db_1.default.rollback(() => {
+                            res.status(500).json({ message: 'Error haciendo commit de la transacción' });
+                        });
+                    }
+                    res.json({ message: 'Cliente actualizado correctamente' });
+                });
+            });
+        });
+    }
+    catch (error) {
+        if (error instanceof Error) {
+            console.error('Error encriptando la contraseña:', error.message);
             return res.status(500).json({ message: 'Error actualizando cliente' });
         }
-        res.json({ message: 'Cliente actualizado correctamente' });
-    });
-});
+        else {
+            console.error('Error encriptando la contraseña:', error);
+            return res.status(500).json({ message: 'Error desconocido al actualizar cliente' });
+        }
+    }
+}));
 router.get("/getAdminById", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const id_user = req.query.id_user;
     if (!id_user) {
