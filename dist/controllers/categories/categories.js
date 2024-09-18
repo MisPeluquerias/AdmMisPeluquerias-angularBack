@@ -203,6 +203,60 @@ router.post("/addCategory", (req, res) => __awaiter(void 0, void 0, void 0, func
         res.status(500).json({ error: "An unexpected error occurred" });
     }
 }));
+router.put("/updateService/:id_service", (req, res) => {
+    const { id_service } = req.params;
+    const { service_name } = req.body;
+    // Validar que se proporcione un nombre de servicio
+    if (!service_name || !id_service) {
+        return res
+            .status(400)
+            .json({ message: "El ID del servicio y el nombre son requeridos" });
+    }
+    // Iniciar la transacción
+    db_1.default.beginTransaction((err) => {
+        if (err) {
+            console.error("Error iniciando la transacción:", err);
+            return res
+                .status(500)
+                .json({ message: "Error al iniciar la transacción" });
+        }
+        // Consulta para actualizar el nombre del servicio
+        const updateServiceQuery = `
+      UPDATE service
+      SET name = ?
+      WHERE id_service = ?
+    `;
+        db_1.default.query(updateServiceQuery, [service_name, id_service], (err, results) => {
+            if (err) {
+                console.error("Error al actualizar el servicio:", err);
+                return db_1.default.rollback(() => {
+                    res
+                        .status(500)
+                        .json({ message: "Error al actualizar el servicio" });
+                });
+            }
+            // Si no se afectaron filas, el servicio no fue encontrado
+            if (results.affectedRows === 0) {
+                return db_1.default.rollback(() => {
+                    res.status(404).json({ message: "Servicio no encontrado" });
+                });
+            }
+            // Confirmar la transacción
+            db_1.default.commit((commitErr) => {
+                if (commitErr) {
+                    console.error("Error al confirmar la transacción:", commitErr);
+                    return db_1.default.rollback(() => {
+                        res
+                            .status(500)
+                            .json({ message: "Error al confirmar la transacción" });
+                    });
+                }
+                // Respuesta exitosa
+                res.status(200).json({ message: "Servicio actualizado con éxito" });
+            });
+        });
+    });
+});
 router.post('/delete', (req, res) => {
     const { names } = req.body;
     if (!names || !Array.isArray(names) || names.length === 0) {

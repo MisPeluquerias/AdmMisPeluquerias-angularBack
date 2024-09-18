@@ -137,6 +137,18 @@ router.get('/exportSalonsToExcel', (req, res) => __awaiter(void 0, void 0, void 
                     };
                 }
             });
+            worksheet.getColumn('categories').eachCell({ includeEmpty: true }, (cell, rowNumber) => {
+                if (rowNumber > 1) { // Omite la cabecera
+                    cell.dataValidation = {
+                        type: 'list',
+                        allowBlank: false,
+                        formulae: ['"Barbería,Peluquería,Estética,Academia,Manicura y Pedicura,Depilación Láser"'],
+                        showErrorMessage: true,
+                        errorTitle: 'Entrada no válida',
+                        error: 'El valor debe ser uno de: Barbería,Peluquería,Estética,Academia,Manicura y Pedicura,Depilación Láser',
+                    };
+                }
+            });
             // Proteger la hoja después de habilitar los filtros
             worksheet.protect('coserty', {
                 selectLockedCells: true,
