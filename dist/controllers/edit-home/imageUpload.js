@@ -12,7 +12,7 @@ const router = express_1.default.Router();
 // Configuración de almacenamiento de multer
 const storage = multer_1.default.diskStorage({
     destination: function (req, file, cb) {
-        cb(null, path_1.default.join(__dirname, '../../../dist/uploads')); // Ajusta la ruta para asegurar que el destino es correcto
+        cb(null, path_1.default.join(__dirname, '../../../dist/uploads/salon-pictures')); //ruta para subir las imagenes
     },
     filename: function (req, file, cb) {
         const uniqueSuffix = Date.now();

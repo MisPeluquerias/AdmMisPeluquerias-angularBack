@@ -13,6 +13,8 @@ connection.connect((err) => {
         return;
     }
     console.log('Connected to the database.');
-});
+}); 
+
+
 
 export default connection;

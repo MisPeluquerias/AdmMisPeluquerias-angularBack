@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const db_1 = __importDefault(require("../../db/db"));
 const body_parser_1 = __importDefault(require("body-parser"));
+const { ResultSetHeader } = require('mysql2');
 const router = express_1.default.Router();
 router.use(body_parser_1.default.json());
 router.get("/getSalonById", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -25,11 +26,16 @@ router.get("/getSalonById", (req, res) => __awaiter(void 0, void 0, void 0, func
     const query = `
   SELECT 
     s.*,
-    GROUP_CONCAT(TRIM(REPLACE(c.categories, '; ', '')) SEPARATOR '; ') AS categories,
-    ci.name as city_name,
-    ci.zip_code as city_zip_code,
+    ci.name AS city_name,
+    ci.zip_code AS city_zip_code,
     p.id_province,
-    p.name as province_name
+    p.name AS province_name,
+    GROUP_CONCAT(
+      JSON_OBJECT(
+        'id_category', c.id_category,
+        'category', c.categories
+      )
+    ) AS categories
   FROM 
     salon s
   LEFT JOIN 
@@ -42,7 +48,7 @@ router.get("/getSalonById", (req, res) => __awaiter(void 0, void 0, void 0, func
     s.id_salon = ?
   GROUP BY 
     s.id_salon;
-  `;
+`;
     db_1.default.beginTransaction((transactionError) => {
         if (transactionError) {
             console.error("Error starting transaction:", transactionError);
@@ -83,7 +89,7 @@ router.get("/getSalonById", (req, res) => __awaiter(void 0, void 0, void 0, func
     });
 }));
 router.put("/updateSalon", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { id_salon, id_city, plus_code, active, state, in_vacation, name, address, latitud, longitud, email, url, phone, map, iframe, image, about_us, score_old, hours_old, zip_code_old, overview_old, categories, } = req.body;
+    const { id_salon, id_city, plus_code, active, state, in_vacation, name, address, latitud, longitud, email, url, phone, map, iframe, image, about_us, score_old, hours_old, zip_code_old, overview_old, } = req.body;
     if (!id_salon) {
         return res.status(400).json({ error: "id_salon is required" });
     }
@@ -111,12 +117,6 @@ router.put("/updateSalon", (req, res) => __awaiter(void 0, void 0, void 0, funct
       zip_code_old = ?,
       overview_old = ?
     WHERE id_salon = ?;
-  `;
-    const deleteCategoriesQuery = `
-    DELETE FROM categories WHERE id_salon = ?;
-  `;
-    const insertCategoryQuery = `
-    INSERT INTO categories (id_salon, categories) VALUES (?, ?);
   `;
     try {
         yield new Promise((resolve, reject) => {
@@ -153,53 +153,14 @@ router.put("/updateSalon", (req, res) => __awaiter(void 0, void 0, void 0, funct
                         db_1.default.rollback(() => reject(queryError));
                         return;
                     }
-                    db_1.default.query(deleteCategoriesQuery, [id_salon], (deleteError) => {
-                        if (deleteError) {
-                            console.error("Error deleting categories:", deleteError);
-                            db_1.default.rollback(() => reject(deleteError));
+                    // Aquí podrías añadir más lógica, como inserciones de categorías, si es necesario.
+                    db_1.default.commit((commitError) => {
+                        if (commitError) {
+                            console.error("Error committing transaction:", commitError);
+                            db_1.default.rollback(() => reject(commitError));
                             return;
                         }
-                        if (categories && categories.trim() !== "") {
-                            const categoryArray = categories
-                                .split(";")
-                                .map((category) => category.trim());
-                            const categoryInserts = categoryArray.map((category) => {
-                                return new Promise((resolveInsert, rejectInsert) => {
-                                    db_1.default.query(insertCategoryQuery, [id_salon, category], (insertError) => {
-                                        if (insertError) {
-                                            return rejectInsert(insertError);
-                                        }
-                                        resolveInsert();
-                                    });
-                                });
-                            });
-                            Promise.all(categoryInserts)
-                                .then(() => {
-                                db_1.default.commit((commitError) => {
-                                    if (commitError) {
-                                        console.error("Error committing transaction:", commitError);
-                                        db_1.default.rollback(() => reject(commitError));
-                                        return;
-                                    }
-                                    resolve();
-                                });
-                            })
-                                .catch((insertError) => {
-                                console.error("Error inserting categories:", insertError);
-                                db_1.default.rollback(() => reject(insertError));
-                            });
-                        }
-                        else {
-                            // Si no hay categorías, simplemente se hace commit
-                            db_1.default.commit((commitError) => {
-                                if (commitError) {
-                                    console.error("Error committing transaction:", commitError);
-                                    db_1.default.rollback(() => reject(commitError));
-                                    return;
-                                }
-                                resolve();
-                            });
-                        }
+                        resolve();
                     });
                 });
             });
@@ -207,8 +168,9 @@ router.put("/updateSalon", (req, res) => __awaiter(void 0, void 0, void 0, funct
         res.json({ message: "Salon updated successfully" });
     }
     catch (error) {
+        console.error("Transaction failed:", error);
         res.status(500).json({
-            error: "An error occurred while updating the salon and categories",
+            error: "An error occurred while updating the salon.",
         });
     }
 }));
@@ -422,7 +384,7 @@ router.post("/createSalon", (req, res) => __awaiter(void 0, void 0, void 0, func
         });
     }
 }));
-router.get("/getServices", (req, res) => {
+router.get("/getServices", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     db_1.default.beginTransaction((err) => {
         if (err) {
             return res.status(500).json({
@@ -432,7 +394,7 @@ router.get("/getServices", (req, res) => {
             });
         }
         // Usar DISTINCT para seleccionar solo servicios únicos por nombre
-        const query = "SELECT DISTINCT name FROM service";
+        const query = "SELECT DISTINCT id_service, name FROM service";
         db_1.default.query(query, (err, results) => {
             if (err) {
                 return db_1.default.rollback(() => {
@@ -457,9 +419,38 @@ router.get("/getServices", (req, res) => {
             });
         });
     });
-});
+}));
+router.get("/getSubservicesByService", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id_service } = req.query;
+    if (!id_service) {
+        return res.status(400).json({ error: "id_service is required" });
+    }
+    // Consulta SQL ajustada para obtener solo el identificador y el nombre de los subservicios
+    const query = `
+    SELECT 
+      id_service_type, 
+      name 
+    FROM 
+      service_type
+    WHERE 
+      id_service = ?
+  `;
+    // Ejecutamos la consulta pasando el id_service como parámetro
+    db_1.default.query(query, [id_service], (err, results) => {
+        if (err) {
+            console.error("Error fetching subservices:", err);
+            return res.status(500).json({
+                success: false,
+                message: "Error fetching subservices",
+                error: err,
+            });
+        }
+        res.json({ success: true, data: results });
+    });
+}));
 router.post("/addService", (req, res) => {
-    const { id_salon, name, subservices, time } = req.body;
+    const { id_salon, id_service, id_service_type, time } = req.body;
+    console.log("Datos recibidos:", req.body);
     db_1.default.beginTransaction((err) => {
         if (err) {
             console.error("Error starting transaction:", err);
@@ -469,8 +460,9 @@ router.post("/addService", (req, res) => {
                 error: err,
             });
         }
-        const insertServiceQuery = "INSERT INTO service (id_salon, name, time) VALUES (?, ?, ?)";
-        db_1.default.query(insertServiceQuery, [id_salon, name, time], (err, results) => {
+        // Inserta los datos usando los IDs correctos
+        const insertServiceQuery = "INSERT INTO salon_service_type (id_salon, id_service, id_service_type, time) VALUES (?, ?, ?, ?)";
+        db_1.default.query(insertServiceQuery, [id_salon, id_service, id_service_type, time], (err, result) => {
             if (err) {
                 console.error("Error inserting service:", err);
                 return db_1.default.rollback(() => {
@@ -481,102 +473,50 @@ router.post("/addService", (req, res) => {
                     });
                 });
             }
-            const service_id = results.insertId;
-            if (subservices && subservices.length > 0) {
-                const subserviceValues = subservices.map((subservice) => [
-                    service_id,
-                    subservice,
-                ]);
-                const insertSubserviceQuery = "INSERT INTO service_type (id_service, name) VALUES ?";
-                db_1.default.query(insertSubserviceQuery, [subserviceValues], (err) => {
-                    if (err) {
-                        console.error("Error inserting subservices:", err);
-                        return db_1.default.rollback(() => {
-                            res.status(500).json({
-                                success: false,
-                                message: "Error inserting subservices",
-                                error: err,
-                            });
-                        });
-                    }
-                    const getServiceQuery = `
-            SELECT s.name AS service_name, s.time, GROUP_CONCAT(st.name ORDER BY st.name SEPARATOR '; ') AS subservices
-            FROM service s
-            INNER JOIN service_type st ON s.id_service = st.id_service
-            WHERE s.id_service = ?
-            GROUP BY s.name, s.time
-          `;
-                    db_1.default.query(getServiceQuery, [service_id], (err, result) => {
-                        if (err) {
-                            console.error("Error fetching service with subservices:", err);
-                            return db_1.default.rollback(() => {
-                                res.status(500).json({
-                                    success: false,
-                                    message: "Error fetching service with subservices",
-                                    error: err,
-                                });
-                            });
-                        }
-                        db_1.default.commit((err) => {
-                            if (err) {
-                                console.error("Error committing transaction:", err);
-                                return db_1.default.rollback(() => {
-                                    res.status(500).json({
-                                        success: false,
-                                        message: "Error committing transaction",
-                                        error: err,
-                                    });
-                                });
-                            }
-                            res.json({ success: true, data: result });
+            db_1.default.commit((err) => {
+                if (err) {
+                    console.error("Error committing transaction:", err);
+                    return db_1.default.rollback(() => {
+                        res.status(500).json({
+                            success: false,
+                            message: "Error committing transaction",
+                            error: err,
                         });
                     });
-                });
-            }
-            else {
-                db_1.default.commit((err) => {
-                    if (err) {
-                        console.error("Error committing transaction:", err);
-                        return db_1.default.rollback(() => {
-                            res.status(500).json({
-                                success: false,
-                                message: "Error committing transaction",
-                                error: err,
-                            });
-                        });
-                    }
-                    res.json({ success: true, data: { name, time, subservices: "" } });
-                });
-            }
+                }
+                res.json({ success: true, data: result });
+            });
         });
     });
 });
-router.get("/getServicesWithSubservices", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const page = parseInt(req.query.page || "1", 10);
-    const pageSize = parseInt(req.query.pageSize || "10", 10);
+router.get("/getServicesWithSubservices", (req, res) => {
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = parseInt(req.query.pageSize) || 10;
     const offset = (page - 1) * pageSize;
     const id_salon = req.query.id_salon;
     if (!id_salon) {
         return res.status(400).json({ error: "id_salon is required" });
     }
     const query = `
-    SELECT SQL_CALC_FOUND_ROWS 
-      s.id_service,
-      s.name AS service_name, 
-      s.time, 
-      GROUP_CONCAT(DISTINCT st.name ORDER BY st.name SEPARATOR '; ') AS subservices
+    SELECT 
+      sst.id_salon_service_type,
+      sst.id_salon,
+      sst.id_service,
+      s.name AS service_name,
+      sst.id_service_type,
+      st.name AS subservice_name,
+      sst.time,
+      sst.active
     FROM 
-      service s
+      salon_service_type sst
     LEFT JOIN 
-      service_type st ON s.id_service = st.id_service
+      service s ON sst.id_service = s.id_service
+    LEFT JOIN 
+      service_type st ON sst.id_service_type = st.id_service_type
     WHERE 
-      s.id_salon = ?
-    GROUP BY 
-      s.id_service, s.name, s.time
-    ORDER BY 
-      s.name
+      sst.id_salon = ?
     LIMIT ?, ?`;
-    const countQuery = "SELECT FOUND_ROWS() AS totalItems";
+    const countQuery = "SELECT COUNT(*) AS totalItems FROM salon_service_type WHERE id_salon = ?";
     db_1.default.beginTransaction((err) => {
         if (err) {
             console.error("Error starting transaction:", err);
@@ -590,20 +530,20 @@ router.get("/getServicesWithSubservices", (req, res) => __awaiter(void 0, void 0
             if (error) {
                 console.error("Error fetching services:", error);
                 return db_1.default.rollback(() => {
-                    res
-                        .status(500)
-                        .json({ error: "An error occurred while fetching data" });
+                    res.status(500).json({ error: "An error occurred while fetching data" });
                 });
             }
-            db_1.default.query(countQuery, (countError, countResults) => {
+            // Cambia el tipo de countResults a any[] para poder indexar el resultado
+            db_1.default.query(countQuery, [id_salon], (countError, countResults) => {
                 if (countError) {
                     console.error("Error fetching count:", countError);
                     return db_1.default.rollback(() => {
-                        res
-                            .status(500)
-                            .json({ error: "An error occurred while fetching data count" });
+                        res.status(500).json({
+                            error: "An error occurred while fetching data count",
+                        });
                     });
                 }
+                // Asegúrate de acceder correctamente al primer elemento
                 const totalItems = countResults[0].totalItems;
                 db_1.default.commit((commitErr) => {
                     if (commitErr) {
@@ -621,117 +561,48 @@ router.get("/getServicesWithSubservices", (req, res) => __awaiter(void 0, void 0
             });
         });
     });
-}));
+});
 router.put("/updateServiceWithSubservice", (req, res) => {
-    const { id_service, id_salon, name, subservices, time } = req.body;
-    db_1.default.beginTransaction((err) => {
+    let { idSalonServiceType, idService, idServiceType, time, active } = req.body;
+    // Validar que idServiceType sea un valor válido y no un objeto vacío
+    if (typeof idServiceType !== 'number' || !idServiceType) {
+        console.error('idServiceType no es válido:', idServiceType);
+        return res.status(400).json({
+            success: false,
+            message: 'El valor de idServiceType no es válido.',
+        });
+    }
+    // Consulta única para actualizar los datos en la tabla
+    const updateQuery = `
+    UPDATE salon_service_type
+    SET id_service = ?, id_service_type = ?, time = ?, active = ?
+    WHERE id_salon_service_type = ?;
+  `;
+    const queryParams = [idService, idServiceType, time, active, idSalonServiceType];
+    // Imprime la consulta y los parámetros para depuración
+    console.log("Consulta SQL:", updateQuery);
+    console.log("Parámetros:", queryParams);
+    // Ejecutar la consulta SQL
+    db_1.default.query(updateQuery, queryParams, (err, results) => {
         if (err) {
-            console.error("Error starting transaction:", err);
+            console.error("Error updating service:", err);
+            // Revisa si hay errores específicos de la base de datos como restricciones de clave foránea
             return res.status(500).json({
                 success: false,
-                message: "Error starting transaction",
+                message: "Error updating service",
                 error: err,
             });
         }
-        const updateServiceQuery = "UPDATE service SET name = ?, time = ? WHERE id_service = ? AND id_salon = ?";
-        db_1.default.query(updateServiceQuery, [name, time, id_service, id_salon], (err, results) => {
-            if (err) {
-                console.error("Error updating service:", err);
-                return db_1.default.rollback(() => {
-                    res.status(500).json({
-                        success: false,
-                        message: "Error updating service",
-                        error: err,
-                    });
-                });
-            }
-            const deleteSubservicesQuery = "DELETE FROM service_type WHERE id_service = ?";
-            db_1.default.query(deleteSubservicesQuery, [id_service], (err) => {
-                if (err) {
-                    console.error("Error deleting old subservices:", err);
-                    return db_1.default.rollback(() => {
-                        res.status(500).json({
-                            success: false,
-                            message: "Error deleting old subservices",
-                            error: err,
-                        });
-                    });
-                }
-                if (subservices && subservices.length > 0) {
-                    const subserviceValues = subservices.map((subservice) => [
-                        id_service,
-                        subservice,
-                    ]);
-                    const insertSubserviceQuery = "INSERT INTO service_type (id_service, name) VALUES ?";
-                    db_1.default.query(insertSubserviceQuery, [subserviceValues], (err) => {
-                        if (err) {
-                            console.error("Error inserting new subservices:", err);
-                            return db_1.default.rollback(() => {
-                                res.status(500).json({
-                                    success: false,
-                                    message: "Error inserting new subservices",
-                                    error: err,
-                                });
-                            });
-                        }
-                        const getServiceQuery = `
-              SELECT s.name AS service_name, s.time, GROUP_CONCAT(st.name ORDER BY st.name SEPARATOR '; ') AS subservices
-              FROM service s
-              INNER JOIN service_type st ON s.id_service = st.id_service
-              WHERE s.id_service = ?
-              GROUP BY s.name, s.time
-            `;
-                        db_1.default.query(getServiceQuery, [id_service], (err, result) => {
-                            if (err) {
-                                console.error("Error fetching updated service with subservices:", err);
-                                return db_1.default.rollback(() => {
-                                    res.status(500).json({
-                                        success: false,
-                                        message: "Error fetching updated service with subservices",
-                                        error: err,
-                                    });
-                                });
-                            }
-                            db_1.default.commit((err) => {
-                                if (err) {
-                                    console.error("Error committing transaction:", err);
-                                    return db_1.default.rollback(() => {
-                                        res.status(500).json({
-                                            success: false,
-                                            message: "Error committing transaction",
-                                            error: err,
-                                        });
-                                    });
-                                }
-                                res.json({ success: true, data: result });
-                            });
-                        });
-                    });
-                }
-                else {
-                    db_1.default.commit((err) => {
-                        if (err) {
-                            console.error("Error committing transaction:", err);
-                            return db_1.default.rollback(() => {
-                                res.status(500).json({
-                                    success: false,
-                                    message: "Error committing transaction",
-                                    error: err,
-                                });
-                            });
-                        }
-                        res.json({
-                            success: true,
-                            data: { name, time, subservices: "" },
-                        });
-                    });
-                }
-            });
+        // Respuesta exitosa
+        res.json({
+            success: true,
+            message: "Service updated successfully",
+            data: results,
         });
     });
 });
-router.delete("/deleteServiceWithSubservices/:id_service", (req, res) => {
-    const { id_service } = req.params;
+router.delete("/deleteServiceWithSubservices/:id_salon_service_type", (req, res) => {
+    const { id_salon_service_type } = req.params;
     db_1.default.beginTransaction((err) => {
         if (err) {
             console.error("Error starting transaction:", err);
@@ -742,8 +613,8 @@ router.delete("/deleteServiceWithSubservices/:id_service", (req, res) => {
             });
         }
         // Primero, elimina los subservicios asociados al servicio
-        const deleteSubservicesQuery = "DELETE FROM service_type WHERE id_service = ?";
-        db_1.default.query(deleteSubservicesQuery, [id_service], (err) => {
+        const deleteSubservicesQuery = "DELETE FROM salon_service_type WHERE id_salon_service_type = ?";
+        db_1.default.query(deleteSubservicesQuery, [id_salon_service_type], (err) => {
             if (err) {
                 console.error("Error deleting subservices:", err);
                 return db_1.default.rollback(() => {
@@ -756,7 +627,7 @@ router.delete("/deleteServiceWithSubservices/:id_service", (req, res) => {
             }
             // Luego, elimina el servicio principal
             const deleteServiceQuery = "DELETE FROM service WHERE id_service = ?";
-            db_1.default.query(deleteServiceQuery, [id_service], (err) => {
+            db_1.default.query(deleteServiceQuery, [id_salon_service_type], (err) => {
                 if (err) {
                     console.error("Error deleting service:", err);
                     return db_1.default.rollback(() => {
@@ -1069,5 +940,143 @@ router.post("/deleteReview", (req, res) => __awaiter(void 0, void 0, void 0, fun
         console.error("Error al eliminar la reseña:", err);
         res.status(500).json({ error: "Error al eliminar la reseña." });
     }
+}));
+router.get("/getAllCategoriesSalon", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const query = `
+      SELECT DISTINCT categories
+      FROM categories
+  `;
+    // Iniciar la transacción
+    db_1.default.beginTransaction((err) => {
+        if (err) {
+            console.error("Error iniciando la transacción:", err);
+            return res.status(500).json({ error: "Error al iniciar la transacción" });
+        }
+        // Ejecutar la consulta SQL
+        db_1.default.query(query, (error, results) => {
+            if (error) {
+                console.error("Error al obtener las categorías:", error);
+                // Revertir la transacción en caso de error
+                return db_1.default.rollback(() => {
+                    res.status(500).json({ error: "Error al obtener las categorías" });
+                });
+            }
+            // Procesar los resultados
+            const processedResults = results.map((row) => ({
+                category: row.categories,
+            }));
+            // Confirmar la transacción
+            db_1.default.commit((commitError) => {
+                if (commitError) {
+                    console.error("Error al confirmar la transacción:", commitError);
+                    // Revertir la transacción en caso de error al confirmar
+                    return db_1.default.rollback(() => {
+                        res.status(500).json({ error: "Error al confirmar la transacción" });
+                    });
+                }
+                // Enviar la respuesta exitosa
+                res.json({ data: processedResults });
+            });
+        });
+    });
+}));
+router.post('/addCategorySalon', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id_salon, category } = req.body;
+    // Validar que los campos requeridos estén presentes
+    if (!id_salon || !category) {
+        return res.status(400).json({ error: 'id_salon y category son requeridos.' });
+    }
+    // Consulta para insertar la nueva categoría
+    const insertCategoryQuery = `
+    INSERT INTO categories (id_salon, categories)
+    VALUES (?, ?);
+  `;
+    try {
+        // Iniciar transacción
+        yield new Promise((resolve, reject) => {
+            db_1.default.beginTransaction((transactionError) => {
+                if (transactionError) {
+                    console.error('Error al iniciar la transacción:', transactionError);
+                    return reject(transactionError);
+                }
+                // Ejecutar la consulta para insertar la categoría
+                db_1.default.query(insertCategoryQuery, [id_salon, category], (queryError) => {
+                    if (queryError) {
+                        console.error('Error al insertar la categoría:', queryError);
+                        db_1.default.rollback(() => reject(queryError));
+                        return;
+                    }
+                    // Commit de la transacción
+                    db_1.default.commit((commitError) => {
+                        if (commitError) {
+                            console.error('Error al hacer commit de la transacción:', commitError);
+                            db_1.default.rollback(() => reject(commitError));
+                            return;
+                        }
+                        resolve(null);
+                    });
+                });
+            });
+        });
+        // Respuesta de éxito
+        res.json({ message: 'Categoría añadida correctamente.' });
+    }
+    catch (error) {
+        console.error('Error en la transacción:', error);
+        res.status(500).json({ error: 'Ocurrió un error al añadir la categoría.' });
+    }
+}));
+router.put('/updateCategorySalon', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id_category, categories } = req.body;
+    //console.log('id_category:', id_category);
+    //console.log('categories:', categories);
+    // Validar que los campos requeridos estén presentes
+    if (!id_category || !categories) {
+        return res.status(400).json({ error: 'id_category y categories son requeridos.' });
+    }
+    // Consulta SQL para actualizar la categoría
+    const updateCategoryQuery = `
+    UPDATE categories
+    SET categories = ?
+    WHERE id_category = ?;
+  `;
+    // Forzar el tipo de resultado a ResultSetHeader
+    db_1.default.query(updateCategoryQuery, [categories, id_category], (error, results) => {
+        if (error) {
+            console.error('Error al actualizar la categoría:', error);
+            return res.status(500).json({ error: 'Error al actualizar la categoría.' });
+        }
+        //console.log('Resultados de la consulta:', results);
+        // Acceder a affectedRows desde ResultSetHeader
+        if (results.affectedRows === 0) {
+            return res.status(404).json({ error: 'Categoría no encontrada o no se pudo actualizar.' });
+        }
+        res.json({ message: 'Categoría actualizada correctamente.' });
+    });
+}));
+router.delete('/deleteCategotySalon/:id_category', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id_category } = req.params;
+    // Verificar si id_category es válido
+    if (!id_category) {
+        return res.status(400).json({ message: 'ID de categoría no proporcionado' });
+    }
+    // Consulta SQL para eliminar la categoría
+    const deleteQuery = 'DELETE FROM categories WHERE id_category = ?';
+    // Ejecutar la consulta
+    db_1.default.query(deleteQuery, [id_category], (err, result) => {
+        if (err) {
+            console.error('Error al eliminar la categoría:', err);
+            return res.status(500).json({ message: 'Error al eliminar la categoría' });
+        }
+        // Convertir result a OkPacket para poder acceder a affectedRows
+        const okResult = result;
+        // Verificar si se eliminó alguna fila comprobando affectedRows
+        if (okResult.affectedRows > 0) {
+            return res.status(200).json({ message: 'Categoría eliminada exitosamente' });
+        }
+        else {
+            return res.status(404).json({ message: 'Categoría no encontrada' });
+        }
+    });
 }));
 exports.default = router;
