@@ -79,6 +79,46 @@ router.get('/getAllReclamations', async (req, res) => {
   });
 });
 
+router.put('/updateStateReclamation', async (req, res) => {
+  try {
+    const { id_salon_reclamacion, state } = req.body;
+
+    // Validación de los datos
+    if (!id_salon_reclamacion) {
+      return res.status(400).json({ error: 'Missing id_salon_reclamacion' });
+    }
+
+    const updateQuery = `
+      UPDATE salon_reclamacion
+      SET state = ?
+      WHERE id_salon_reclamacion = ?
+    `;
+
+    // Ejecutar la consulta de actualización como una promesa
+    await new Promise((resolve, reject) => {
+      connection.query(
+        updateQuery,
+        [state, id_salon_reclamacion], // Solo actualizar el estado
+        (error, results) => {
+          if (error) {
+            console.error('Error updating reclamation:', error);
+            return reject(error);
+          }
+          resolve(results);
+        }
+      );
+    });
+
+    // Respuesta exitosa
+    res.json({ message: 'Reclamation state updated successfully' });
+  } catch (error) {
+    // Manejo de errores generales
+    console.error('Error updating reclamation:', error);
+    res.status(500).json({ error: 'An error occurred while updating reclamation' });
+  }
+});
+
+
 
 
 

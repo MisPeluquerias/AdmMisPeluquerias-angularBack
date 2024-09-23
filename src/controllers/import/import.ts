@@ -145,6 +145,7 @@ router.post("/updateExcel", upload.single("file"), async (req, res) => {
             });
           });
       
+          
           // Eliminar el salón después de eliminar las categorías asociadas
           const deleteSalonQuery = `DELETE FROM salon WHERE id_salon = ?`;
           await new Promise((resolve, reject) => {

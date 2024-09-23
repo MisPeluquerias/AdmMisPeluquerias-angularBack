@@ -40,4 +40,44 @@ router.get('/getAllMessageContact', async (req, res) => {
   });
 });
 
+router.put('/updateStateContact', async (req, res) => {
+  try {
+    const { id_contact, state } = req.body;
+
+     //console.log(req.body);
+    // Validación de los datos
+    if (!id_contact) {
+      return res.status(400).json({ error: 'Missing id_contact' });
+    }
+
+    const updateQuery = `
+      UPDATE contact
+      SET state = ?
+      WHERE id_contact = ?
+    `;
+
+    // Ejecutar la consulta de actualización como una promesa
+    await new Promise((resolve, reject) => {
+      connection.query(
+        updateQuery,
+        [state, id_contact], // Solo actualizar el estado
+        (error, results) => {
+          if (error) {
+            console.error('Error updating contact:', error);
+            return reject(error);
+          }
+          resolve(results);
+        }
+      );
+    });
+
+    // Respuesta exitosa
+    res.json({ message: 'Contact state updated successfully' });
+  } catch (error) {
+    // Manejo de errores generales
+    console.error('Error updating contact:', error);
+    res.status(500).json({ error: 'An error occurred while updating contact' });
+  }
+});
+
 export default router;
