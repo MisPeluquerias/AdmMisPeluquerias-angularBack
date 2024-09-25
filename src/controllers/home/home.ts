@@ -114,4 +114,5 @@ router.get('/getAllSalon', async (req: Request, res: Response) => {
   });
 });
 
+
 export default router;

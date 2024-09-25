@@ -10,6 +10,8 @@ router.use(bodyParser.json());
 
 
 
+
+
 router.get("/getAllCategories", async (req, res) => {
   try {
       const page = parseInt((req.query.page as string) || "1", 10);
@@ -88,6 +90,8 @@ router.get("/getAllCategories", async (req, res) => {
       res.status(500).json({ error: "An unexpected error occurred" });
   }
 });
+
+
 
 
 
@@ -303,6 +307,8 @@ router.put("/updateService/:id_service", (req, res) => {
     );
   });
 });
+
+
 
 router.post('/delete', (req, res) => {
   const { names } = req.body;

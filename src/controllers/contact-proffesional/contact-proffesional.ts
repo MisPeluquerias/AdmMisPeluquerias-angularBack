@@ -1,12 +1,14 @@
 import express from 'express';
 import connection from '../../db/db';
 import bodyParser from 'body-parser';
+import { RowDataPacket } from 'mysql2';
 
+const nodemailer = require('nodemailer');
 const router = express.Router();
 router.use(bodyParser.json());
 
 
-const nodemailer = require('nodemailer');
+
 
 const transporter = nodemailer.createTransport({
   host: 'mail.mispeluquerias.com', // Cambia esto por el host SMTP de tu proveedor
@@ -18,7 +20,8 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-router.post('/send-reply-contact', async (req, res) => {
+
+router.post('/send-reply-contactProffesional', async (req, res) => {
   const { to, subject, message } = req.body;
 
   // Configuración del correo a enviar
@@ -58,34 +61,49 @@ router.get('/getAllMessageContactProffesional', async (req, res) => {
   const pageSize = parseInt(req.query.pageSize as string || '10', 10);
   const offset = (page - 1) * pageSize;
   const search = req.query.search ? `%${req.query.search}%` : '%%';
+  const filterState = req.query.filterState ? req.query.filterState.toString() : '%%';
 
-  const query = `
+  // Inicializa la consulta base y los parámetros de la consulta
+  let query = `
     SELECT SQL_CALC_FOUND_ROWS * 
     FROM contact_proffesional 
-    WHERE name LIKE ? OR email LIKE ? OR phone LIKE ? OR text LIKE ?
-    LIMIT ?, ?;
+    WHERE (name LIKE ? OR email LIKE ? OR phone LIKE ? OR text LIKE ?)
   `;
-  const countQuery = 'SELECT FOUND_ROWS() AS totalItems';
+  const queryParams: any[] = [search, search, search, search];
 
-  connection.query(query, [search, search, search, search, offset, pageSize], (error, results) => {
+  // Aplica los filtros si están presentes
+ 
+  if (filterState && filterState !== '%%') {
+    query += ' AND state = ?';
+    queryParams.push(filterState);
+  }
+
+  // Añade los límites de paginación
+  query += ' LIMIT ?, ?';
+  queryParams.push(offset, pageSize);
+
+  // Ejecuta la consulta principal
+  connection.query(query, queryParams, (error, results) => {
     if (error) {
       console.error('Error fetching data:', error);
       res.status(500).json({ error: 'An error occurred while fetching data' });
       return;
     }
 
-    connection.query(countQuery, (countError, countResults) => {
+    // Ejecuta la consulta para contar los elementos totales
+    connection.query('SELECT FOUND_ROWS() AS totalItems', (countError, countResults) => {
       if (countError) {
         console.error('Error fetching count:', countError);
         res.status(500).json({ error: 'An error occurred while fetching data count' });
         return;
       }
 
-      const totalItems = (countResults as any)[0].totalItems;
+      const totalItems = (countResults as RowDataPacket[])[0]?.totalItems;
       res.json({ data: results, totalItems });
     });
   });
 });
+
 
 router.put('/updateStateContactProffesional', async (req, res) => {
   try {

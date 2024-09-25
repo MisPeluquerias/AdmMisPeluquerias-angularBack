@@ -22,26 +22,38 @@ router.get('/getAllMessageContact', (req, res) => __awaiter(void 0, void 0, void
     const pageSize = parseInt(req.query.pageSize || '10', 10);
     const offset = (page - 1) * pageSize;
     const search = req.query.search ? `%${req.query.search}%` : '%%';
-    const query = `
+    const filterState = req.query.filterState ? req.query.filterState.toString() : '%%';
+    // Inicializa la consulta base y los parámetros de la consulta
+    let query = `
     SELECT SQL_CALC_FOUND_ROWS * 
     FROM contact 
-    WHERE name LIKE ? OR email LIKE ? OR phone LIKE ? OR text LIKE ?
-    LIMIT ?, ?;
+    WHERE (name LIKE ? OR email LIKE ? OR phone LIKE ? OR text LIKE ?)
   `;
-    const countQuery = 'SELECT FOUND_ROWS() AS totalItems';
-    db_1.default.query(query, [search, search, search, search, offset, pageSize], (error, results) => {
+    const queryParams = [search, search, search, search];
+    // Aplica los filtros si están presentes
+    if (filterState && filterState !== '%%') {
+        query += ' AND state = ?';
+        queryParams.push(filterState);
+    }
+    // Añade los límites de paginación
+    query += ' LIMIT ?, ?';
+    queryParams.push(offset, pageSize);
+    // Ejecuta la consulta principal
+    db_1.default.query(query, queryParams, (error, results) => {
         if (error) {
             console.error('Error fetching data:', error);
             res.status(500).json({ error: 'An error occurred while fetching data' });
             return;
         }
-        db_1.default.query(countQuery, (countError, countResults) => {
+        // Ejecuta la consulta para contar los elementos totales
+        db_1.default.query('SELECT FOUND_ROWS() AS totalItems', (countError, countResults) => {
+            var _a;
             if (countError) {
                 console.error('Error fetching count:', countError);
                 res.status(500).json({ error: 'An error occurred while fetching data count' });
                 return;
             }
-            const totalItems = countResults[0].totalItems;
+            const totalItems = (_a = countResults[0]) === null || _a === void 0 ? void 0 : _a.totalItems;
             res.json({ data: results, totalItems });
         });
     });
@@ -77,6 +89,46 @@ router.put('/updateStateContact', (req, res) => __awaiter(void 0, void 0, void 0
         // Manejo de errores generales
         console.error('Error updating contact:', error);
         res.status(500).json({ error: 'An error occurred while updating contact' });
+    }
+}));
+const nodemailer = require('nodemailer');
+const transporter = nodemailer.createTransport({
+    host: 'mail.mispeluquerias.com', // Cambia esto por el host SMTP de tu proveedor
+    port: 465, // Puerto SMTP seguro, usa 587 si el 465 no funciona
+    secure: true, // true para el puerto 465, false para otros puertos como 587
+    auth: {
+        user: 'comunicaciones@mispeluquerias.com', // Tu dirección de correo
+        pass: 'MisP2024@', // La contraseña de tu correo (verifica que sea correcta)
+    },
+});
+router.post('/send-reply-contact', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { to, subject, message } = req.body;
+    // Configuración del correo a enviar
+    const mailOptions = {
+        from: '"mispeluquerias.com" <comunicaciones@mispeluquerias.com>', // Remitente
+        to, // Correo del destinatario
+        subject, // Asunto del correo
+        text: message, // Mensaje en texto plano
+        html: `
+      <p>${message}</p>
+      <p>Por favor, no respondas directamente a este correo.</p>
+      <p>Para responder, visita nuestra plataforma en 
+        <a href="https://www.mispeluquerias.com/contacto" target="_blank" style="color: #007bff; text-decoration: underline;">
+          www.mispeluquerias.com/contacto
+        </a>.
+      </p>
+    `,
+    };
+    try {
+        // Enviar el correo
+        const info = yield transporter.sendMail(mailOptions);
+        // Enviar una respuesta JSON para evitar errores en el frontend
+        res.status(200).json({ success: true, message: 'Correo enviado con éxito' });
+    }
+    catch (error) {
+        // Manejar errores y enviar una respuesta JSON
+        console.error('Error al enviar el correo:', error);
+        res.status(500).json({ success: false, message: 'Error al enviar el correo' });
     }
 }));
 exports.default = router;

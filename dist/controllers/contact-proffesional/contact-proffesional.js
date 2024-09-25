@@ -15,9 +15,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const db_1 = __importDefault(require("../../db/db"));
 const body_parser_1 = __importDefault(require("body-parser"));
+const nodemailer = require('nodemailer');
 const router = express_1.default.Router();
 router.use(body_parser_1.default.json());
-const nodemailer = require('nodemailer');
 const transporter = nodemailer.createTransport({
     host: 'mail.mispeluquerias.com', // Cambia esto por el host SMTP de tu proveedor
     port: 465, // Puerto SMTP seguro, usa 587 si el 465 no funciona
@@ -27,7 +27,7 @@ const transporter = nodemailer.createTransport({
         pass: 'MisP2024@', // La contraseña de tu correo (verifica que sea correcta)
     },
 });
-router.post('/send-reply-contact', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.post('/send-reply-contactProffesional', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { to, subject, message } = req.body;
     // Configuración del correo a enviar
     const mailOptions = {
@@ -62,26 +62,38 @@ router.get('/getAllMessageContactProffesional', (req, res) => __awaiter(void 0, 
     const pageSize = parseInt(req.query.pageSize || '10', 10);
     const offset = (page - 1) * pageSize;
     const search = req.query.search ? `%${req.query.search}%` : '%%';
-    const query = `
+    const filterState = req.query.filterState ? req.query.filterState.toString() : '%%';
+    // Inicializa la consulta base y los parámetros de la consulta
+    let query = `
     SELECT SQL_CALC_FOUND_ROWS * 
     FROM contact_proffesional 
-    WHERE name LIKE ? OR email LIKE ? OR phone LIKE ? OR text LIKE ?
-    LIMIT ?, ?;
+    WHERE (name LIKE ? OR email LIKE ? OR phone LIKE ? OR text LIKE ?)
   `;
-    const countQuery = 'SELECT FOUND_ROWS() AS totalItems';
-    db_1.default.query(query, [search, search, search, search, offset, pageSize], (error, results) => {
+    const queryParams = [search, search, search, search];
+    // Aplica los filtros si están presentes
+    if (filterState && filterState !== '%%') {
+        query += ' AND state = ?';
+        queryParams.push(filterState);
+    }
+    // Añade los límites de paginación
+    query += ' LIMIT ?, ?';
+    queryParams.push(offset, pageSize);
+    // Ejecuta la consulta principal
+    db_1.default.query(query, queryParams, (error, results) => {
         if (error) {
             console.error('Error fetching data:', error);
             res.status(500).json({ error: 'An error occurred while fetching data' });
             return;
         }
-        db_1.default.query(countQuery, (countError, countResults) => {
+        // Ejecuta la consulta para contar los elementos totales
+        db_1.default.query('SELECT FOUND_ROWS() AS totalItems', (countError, countResults) => {
+            var _a;
             if (countError) {
                 console.error('Error fetching count:', countError);
                 res.status(500).json({ error: 'An error occurred while fetching data count' });
                 return;
             }
-            const totalItems = countResults[0].totalItems;
+            const totalItems = (_a = countResults[0]) === null || _a === void 0 ? void 0 : _a.totalItems;
             res.json({ data: results, totalItems });
         });
     });

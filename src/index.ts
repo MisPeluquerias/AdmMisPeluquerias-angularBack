@@ -25,6 +25,7 @@ import ownerSalon from './controllers/owner-salon/owner-salon';
 import editOwner from './controllers/edit-owner/edit-owner';
 import editCity from './controllers/edit-city/edit-city'
 import decodePermiso from './functions/decodeTokenPermiso';
+import Brands from './controllers/brands/brands';
 
 
 const app = express();
@@ -65,6 +66,7 @@ app.use('/owner-salon',ownerSalon);
 app.use('/edit-owner',editOwner);
 app.use('/edit-city',editCity);
 app.use('/decode-permiso',decodePermiso);
+app.use('/brands',Brands);
  
 
 

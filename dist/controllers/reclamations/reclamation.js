@@ -15,49 +15,68 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const db_1 = __importDefault(require("../../db/db"));
 const body_parser_1 = __importDefault(require("body-parser"));
+const nodemailer = require('nodemailer');
 const router = express_1.default.Router();
 router.use(body_parser_1.default.json());
 router.get('/getAllReclamations', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { page = '1', pageSize = '3' } = req.query; // Cambié el valor predeterminado de pageSize a '3'
+    const { page = '1', pageSize = '3', filterState } = req.query;
     const pageNumber = parseInt(page, 10);
     const pageSizeNumber = parseInt(pageSize, 10);
     const offset = (pageNumber - 1) * pageSizeNumber;
-    const query = `
-  SELECT sr.*, 
-         u.name AS user_name, 
-         u.email, 
-         c.name AS city_name, 
-         p.name AS province_name
-  FROM salon_reclamacion sr
-  INNER JOIN user u ON sr.id_user = u.id_user
-  INNER JOIN city c ON sr.id_city = c.id_city
-  INNER JOIN province p ON c.id_province = p.id_province
-  LIMIT ?, ?;
-`;
-    const countQuery = 'SELECT COUNT(*) AS totalItems FROM salon_reclamacion';
+    // Base query para obtener las reclamaciones con sus relaciones
+    let query = `
+    SELECT sr.*, 
+           u.name AS user_name, 
+           u.email, 
+           c.name AS city_name, 
+           p.name AS province_name
+    FROM salon_reclamacion sr
+    INNER JOIN user u ON sr.id_user = u.id_user
+    INNER JOIN city c ON sr.id_city = c.id_city
+    INNER JOIN province p ON c.id_province = p.id_province
+    WHERE 1=1
+  `;
+    // Manejo de filtros
+    const queryParams = [];
+    if (filterState && filterState !== '%%') {
+        query += ' AND sr.state = ?';
+        queryParams.push(filterState);
+    }
+    // Añadir límites de paginación al final de la consulta
+    query += ' LIMIT ?, ?';
+    queryParams.push(offset, pageSizeNumber);
+    // Consulta para contar el total de elementos sin paginación
+    const countQuery = `
+    SELECT COUNT(*) AS totalItems 
+    FROM salon_reclamacion sr
+    INNER JOIN user u ON sr.id_user = u.id_user
+    INNER JOIN city c ON sr.id_city = c.id_city
+    INNER JOIN province p ON c.id_province = p.id_province
+    WHERE 1=1
+  ` + (filterState && filterState !== '%%' ? ' AND sr.state = ?' : '');
     // Iniciar la transacción
     db_1.default.beginTransaction(err => {
         if (err) {
             console.error('Error starting transaction:', err);
             return res.status(500).json({ error: 'An error occurred while starting transaction' });
         }
-        // Primera consulta: obtener datos de reclamaciones
-        db_1.default.query(query, [offset, pageSizeNumber], (error, results) => {
+        // Ejecutar la consulta principal con filtros y paginación
+        db_1.default.query(query, queryParams, (error, results) => {
             if (error) {
                 return db_1.default.rollback(() => {
                     console.error('Error fetching data:', error);
                     res.status(500).json({ error: 'An error occurred while fetching data' });
                 });
             }
-            // Segunda consulta: contar el total de registros
-            db_1.default.query(countQuery, (countError, countResults) => {
+            // Ejecutar la consulta de conteo total
+            db_1.default.query(countQuery, filterState && filterState !== '%%' ? [filterState] : [], (countError, countResults) => {
                 if (countError) {
                     return db_1.default.rollback(() => {
                         console.error('Error fetching count:', countError);
                         res.status(500).json({ error: 'An error occurred while fetching data count' });
                     });
                 }
-                // Si todo fue bien, commit y envío de los resultados
+                // Commit de la transacción
                 db_1.default.commit(commitError => {
                     if (commitError) {
                         return db_1.default.rollback(() => {
@@ -65,7 +84,7 @@ router.get('/getAllReclamations', (req, res) => __awaiter(void 0, void 0, void 0
                             res.status(500).json({ error: 'An error occurred while committing transaction' });
                         });
                     }
-                    // Manejo seguro de resultados
+                    // Manejo de los resultados de la consulta de conteo
                     const totalItems = countResults[0].totalItems;
                     const totalPages = Math.ceil(totalItems / pageSizeNumber);
                     res.json({
@@ -83,35 +102,179 @@ router.get('/getAllReclamations', (req, res) => __awaiter(void 0, void 0, void 0
     });
 }));
 router.put('/updateStateReclamation', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id_salon_reclamacion, state, id_user, salon_name, email } = req.body;
+    console.log('Reclamación recibida en el servidor:', req.body);
+    if (!id_salon_reclamacion || !state || !id_user || !salon_name) {
+        return res.status(400).json({ error: 'Faltan datos requeridos: id_salon_reclamacion, state, id_user o salon_name' });
+    }
     try {
-        const { id_salon_reclamacion, state } = req.body;
-        // Validación de los datos
-        if (!id_salon_reclamacion) {
-            return res.status(400).json({ error: 'Missing id_salon_reclamacion' });
-        }
-        const updateQuery = `
+        yield new Promise((resolve, reject) => {
+            db_1.default.beginTransaction((err) => {
+                if (err)
+                    return reject(err);
+                resolve();
+            });
+        });
+        const updateStateQuery = `
       UPDATE salon_reclamacion
       SET state = ?
       WHERE id_salon_reclamacion = ?
     `;
-        // Ejecutar la consulta de actualización como una promesa
-        yield new Promise((resolve, reject) => {
-            db_1.default.query(updateQuery, [state, id_salon_reclamacion], // Solo actualizar el estado
-            (error, results) => {
+        const updateResults = yield new Promise((resolve, reject) => {
+            db_1.default.query(updateStateQuery, [state, id_salon_reclamacion], (error, results) => {
                 if (error) {
-                    console.error('Error updating reclamation:', error);
                     return reject(error);
                 }
                 resolve(results);
             });
         });
-        // Respuesta exitosa
-        res.json({ message: 'Reclamation state updated successfully' });
+        if (updateResults.affectedRows === 0) {
+            throw new Error('No se encontró la reclamación con el ID proporcionado.');
+        }
+        // Acción para estado 'Validado'
+        if (state === 'Validado') {
+            const getSalonIdQuery = `
+        SELECT id_salon FROM salon WHERE name = ?
+      `;
+            const salonResult = yield new Promise((resolve, reject) => {
+                db_1.default.query(getSalonIdQuery, [salon_name], (error, results) => {
+                    if (error)
+                        return reject(error);
+                    resolve(results);
+                });
+            });
+            if (salonResult.length === 0) {
+                throw new Error('No se encontró un salón con el nombre proporcionado.');
+            }
+            const id_salon = salonResult[0].id_salon;
+            const insertUserSalonQuery = `
+        INSERT INTO user_salon (id_user, id_salon)
+        VALUES (?, ?)
+      `;
+            const insertResults = yield new Promise((resolve, reject) => {
+                db_1.default.query(insertUserSalonQuery, [id_user, id_salon], (error, results) => {
+                    if (error) {
+                        return reject(error);
+                    }
+                    resolve(results);
+                });
+            });
+            if (insertResults.affectedRows === 0) {
+                throw new Error('Error al insertar el registro en la tabla user_salon.');
+            }
+            const updatePermissionQuery = `
+        UPDATE user
+        SET permiso = 'salon'
+        WHERE id_user = ?
+      `;
+            yield new Promise((resolve, reject) => {
+                db_1.default.query(updatePermissionQuery, [id_user], (error, results) => {
+                    if (error) {
+                        return reject(error);
+                    }
+                    const permissionUpdateResults = results;
+                    if (permissionUpdateResults.affectedRows === 0) {
+                        return reject(new Error('No se encontró el usuario con el ID proporcionado.'));
+                    }
+                    resolve(permissionUpdateResults);
+                });
+            });
+            // Enviar correo si el email está definido y no es vacío
+            if (email && email.trim() !== '') {
+                const transporter = nodemailer.createTransport({
+                    host: 'mail.mispeluquerias.com',
+                    port: 465,
+                    secure: true,
+                    auth: {
+                        user: 'comunicaciones@mispeluquerias.com',
+                        pass: 'MisP2024@',
+                    },
+                });
+                const mailOptions = {
+                    from: '"mispeluquerias.com" <comunicaciones@mispeluquerias.com>',
+                    to: email,
+                    subject: 'Reclamación Validada',
+                    html: `
+            <p>¡Enhorabuena! Tu reclamación ha sido validada exitosamente para el salón ${salon_name}.</p>
+            <p>Para administrar tu establecimiento, visita la plataforma 
+              <a href="https://adm.mispeluquerias.com/login" target="_blank" style="color: #007bff; text-decoration: underline;">
+                www.adm.mispeluquerias.com
+              </a> introduciendo sus credenciales de usuario.
+            </p>
+            <p>Por favor, no respondas a este correo.</p>
+          `,
+                };
+                transporter.sendMail(mailOptions, (error, info) => {
+                    if (error instanceof Error) {
+                        console.error('Error al enviar el correo:', error.message);
+                    }
+                    else {
+                        console.log('Correo enviado:', info.response);
+                    }
+                });
+            }
+            else {
+                console.error('El correo electrónico del usuario no está definido o es inválido.');
+            }
+        }
+        // Acción para estado 'Pendiente' o 'En revisión': eliminar el registro de user_salon
+        if (state === 'Pendiente' || state === 'En revisión') {
+            const deleteUserSalonQuery = `
+        DELETE FROM user_salon
+        WHERE id_user = ? AND id_salon = (
+          SELECT id_salon FROM salon WHERE name = ?
+        )
+      `;
+            const deleteResults = yield new Promise((resolve, reject) => {
+                db_1.default.query(deleteUserSalonQuery, [id_user, salon_name], (error, results) => {
+                    if (error) {
+                        return reject(error);
+                    }
+                    resolve(results);
+                });
+            });
+            if (deleteResults.affectedRows > 0) {
+                // Actualizar el permiso del usuario a 'client' después de eliminar
+                const updateToClientQuery = `
+          UPDATE user
+          SET permiso = 'client'
+          WHERE id_user = ?
+        `;
+                yield new Promise((resolve, reject) => {
+                    db_1.default.query(updateToClientQuery, [id_user], (error, results) => {
+                        if (error) {
+                            return reject(error);
+                        }
+                        resolve(results);
+                    });
+                });
+            }
+            else {
+                console.log('No se encontró ningún registro en user_salon para eliminar.');
+            }
+        }
+        yield new Promise((resolve, reject) => {
+            db_1.default.commit((err) => {
+                if (err) {
+                    return db_1.default.rollback(() => {
+                        reject(err);
+                    });
+                }
+                resolve();
+            });
+        });
+        res.json({ message: 'Reclamación y permisos actualizados exitosamente.' });
     }
     catch (error) {
-        // Manejo de errores generales
-        console.error('Error updating reclamation:', error);
-        res.status(500).json({ error: 'An error occurred while updating reclamation' });
+        if (error instanceof Error) {
+            console.error('Error al actualizar la reclamación o permisos:', error.message);
+        }
+        else {
+            console.error('Error desconocido al actualizar la reclamación o permisos:', error);
+        }
+        db_1.default.rollback(() => {
+            res.status(500).json({ error: 'Ocurrió un error al actualizar la reclamación o los permisos del usuario.' });
+        });
     }
 }));
 exports.default = router;
