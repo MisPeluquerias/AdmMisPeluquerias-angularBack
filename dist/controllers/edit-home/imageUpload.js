@@ -26,7 +26,7 @@ const upload = (0, multer_1.default)({ storage: storage });
 // Ruta para manejar la carga de imágenes
 router.post('/uploadImg', upload.single('image'), (req, res) => {
     if (req.file) {
-        const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+        const fileUrl = `${req.protocol}://${req.get('host')}/uploads/salon-pictures/${req.file.filename}`;
         const { file_name, file_description, file_group, file_principal, file_active, salon_id } = req.body;
         if (!salon_id) {
             return res.status(400).json({ error: 'salon_id is required' });
@@ -135,7 +135,7 @@ router.delete('/deleteImage/:id', (req, res) => {
         const fileName = path_1.default.basename(fileUrl);
         //console.log('Extracted file name:', fileName);
         // Construir la ruta del archivo en el sistema de archivos, apuntando a dist/uploads
-        const filePath = path_1.default.join(__dirname, '../../uploads', fileName);
+        const filePath = path_1.default.join(__dirname, '../../uploads/salon-pictures', fileName);
         //console.log('File path to delete:', filePath);
         // Verificar si el archivo realmente existe
         fs_1.default.access(filePath, fs_1.default.constants.F_OK, (err) => {
