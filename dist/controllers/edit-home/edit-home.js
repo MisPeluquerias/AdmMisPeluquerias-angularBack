@@ -35,7 +35,8 @@ router.get("/getSalonById", (req, res) => __awaiter(void 0, void 0, void 0, func
         'id_category', c.id_category,
         'category', c.categories
       )
-    ) AS categories
+    ) AS categories,
+    ROUND(AVG(r.qualification) * 2) / 2 AS average_rating
   FROM 
     salon s
   LEFT JOIN 
@@ -44,11 +45,13 @@ router.get("/getSalonById", (req, res) => __awaiter(void 0, void 0, void 0, func
     city ci ON s.id_city = ci.id_city
   LEFT JOIN
     province p ON ci.id_province = p.id_province
+  LEFT JOIN
+    review r ON r.id_salon = s.id_salon  -- Une las reseñas para calcular el promedio
   WHERE 
     s.id_salon = ?
   GROUP BY 
     s.id_salon;
-`;
+  `;
     db_1.default.beginTransaction((transactionError) => {
         if (transactionError) {
             console.error("Error starting transaction:", transactionError);
@@ -87,6 +90,56 @@ router.get("/getSalonById", (req, res) => __awaiter(void 0, void 0, void 0, func
             });
         });
     });
+}));
+router.put("/responseReview", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id_review, respuesta } = req.body;
+    // Verificar que ambos campos estén presentes
+    if (!id_review || !respuesta) {
+        return res.status(400).json({ error: "Todos los campos son requeridos." });
+    }
+    try {
+        // Iniciar la transacción
+        yield new Promise((resolve, reject) => {
+            db_1.default.beginTransaction((err) => {
+                if (err)
+                    return reject(err);
+                resolve(undefined);
+            });
+        });
+        // Consulta para actualizar la respuesta
+        const query = `
+      UPDATE review
+      SET respuesta = ?
+      WHERE id_review = ?
+    `;
+        // Ejecutar la consulta
+        yield new Promise((resolve, reject) => {
+            db_1.default.query(query, [respuesta, id_review], (error, results) => {
+                if (error) {
+                    console.error("Error al actualizar la respuesta:", error);
+                    return db_1.default.rollback(() => {
+                        reject(new Error("Error al actualizar la respuesta."));
+                    });
+                }
+                // Hacer commit si la actualización fue exitosa
+                db_1.default.commit((err) => {
+                    if (err) {
+                        console.error("Error al hacer commit:", err);
+                        return db_1.default.rollback(() => {
+                            reject(new Error("Error al hacer commit."));
+                        });
+                    }
+                    resolve(results);
+                });
+            });
+        });
+        // Responder al cliente
+        res.json({ message: "Respuesta actualizada exitosamente." });
+    }
+    catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Ocurrió un error al procesar la solicitud." });
+    }
 }));
 router.put("/updateSalon", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id_salon, id_city, plus_code, active, state, in_vacation, name, address, latitud, longitud, email, url, phone, map, iframe, image, about_us, score_old, hours_old, zip_code_old, overview_old, } = req.body;
@@ -562,6 +615,77 @@ router.get("/getServicesWithSubservices", (req, res) => {
         });
     });
 });
+router.post("/updateReview", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { id_review, observacion, qualification } = req.body;
+        if (!id_review || !observacion || !qualification) {
+            return res
+                .status(400)
+                .json({ error: "Todos los campos son requeridos." });
+        }
+        // Validar que `qualification` tenga las propiedades esperadas
+        const { service, quality, cleanliness, speed } = qualification;
+        if (typeof service !== "number" ||
+            typeof quality !== "number" ||
+            typeof cleanliness !== "number" ||
+            typeof speed !== "number") {
+            return res
+                .status(400)
+                .json({ error: "Los valores de calificación son inválidos." });
+        }
+        // Función para redondear a medios
+        const redondearAMedios = (numero) => {
+            return Math.round(numero * 2) / 2;
+        };
+        // Calcular el promedio de la calificación y redondearlo a medios
+        const averageQualification = redondearAMedios((service + quality + cleanliness + speed) / 4);
+        // Iniciar la transacción
+        yield new Promise((resolve, reject) => {
+            db_1.default.beginTransaction((err) => {
+                if (err)
+                    return reject(err);
+                resolve(undefined);
+            });
+        });
+        // Actualizar la reseña en la base de datos con el promedio redondeado
+        const query = `
+      UPDATE review
+      SET observacion = ?, servicio = ?, calidad_precio = ?, limpieza = ?, puntualidad = ?, qualification = ?
+      WHERE id_review = ?
+    `;
+        // Ejecutar la consulta de actualización
+        db_1.default.query(query, [
+            observacion,
+            service,
+            quality,
+            cleanliness,
+            speed,
+            averageQualification, // Guardar el promedio calculado y redondeado
+            id_review,
+        ], (error, results) => {
+            if (error) {
+                console.error("Error al actualizar la reseña:", error);
+                return db_1.default.rollback(() => {
+                    res.status(500).json({ error: "Error al actualizar la reseña." });
+                });
+            }
+            // Confirmar la transacción
+            db_1.default.commit((err) => {
+                if (err) {
+                    console.error("Error al hacer commit:", err);
+                    return db_1.default.rollback(() => {
+                        res.status(500).json({ error: "Error al hacer commit." });
+                    });
+                }
+                res.json({ message: "Reseña actualizada exitosamente." });
+            });
+        });
+    }
+    catch (err) {
+        console.error("Error al actualizar la reseña:", err);
+        res.status(500).json({ error: "Error al actualizar la reseña." });
+    }
+}));
 router.put("/updateServiceWithSubservice", (req, res) => {
     let { idSalonServiceType, idService, idServiceType, time, active } = req.body;
     // Validar que idServiceType sea un valor válido y no un objeto vacío
@@ -824,7 +948,8 @@ router.get("/loadReview", (req, res) => __awaiter(void 0, void 0, void 0, functi
         });
         const query = `SELECT 
     review.id_review, 
-    review.id_user, 
+    review.id_user,
+    review.respuesta, 
     review.observacion, 
     review.qualification,
     user.name

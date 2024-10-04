@@ -19,6 +19,8 @@ function decodeTokenPermiso(token: string): any | null {
   }
 }
 
+
+
 router.get('/getAllSalon', async (req: Request, res: Response) => {
   const page = parseInt(req.query.page as string || '1', 10);
   const pageSize = parseInt(req.query.pageSize as string || '10', 10);
