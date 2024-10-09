@@ -15,7 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const db_1 = __importDefault(require("../../db/db"));
 const body_parser_1 = __importDefault(require("body-parser"));
-const { ResultSetHeader } = require('mysql2');
+const { ResultSetHeader } = require("mysql2");
 const router = express_1.default.Router();
 router.use(body_parser_1.default.json());
 router.get("/getSalonById", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -94,7 +94,7 @@ router.get("/getSalonById", (req, res) => __awaiter(void 0, void 0, void 0, func
 router.put("/responseReview", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id_review, respuesta } = req.body;
     // Verificar que ambos campos estén presentes
-    if (!id_review || !respuesta) {
+    if (!id_review) {
         return res.status(400).json({ error: "Todos los campos son requeridos." });
     }
     try {
@@ -138,7 +138,9 @@ router.put("/responseReview", (req, res) => __awaiter(void 0, void 0, void 0, fu
     }
     catch (error) {
         console.error(error);
-        res.status(500).json({ error: "Ocurrió un error al procesar la solicitud." });
+        res
+            .status(500)
+            .json({ error: "Ocurrió un error al procesar la solicitud." });
     }
 }));
 router.put("/updateSalon", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -473,6 +475,93 @@ router.get("/getServices", (req, res) => __awaiter(void 0, void 0, void 0, funct
         });
     });
 }));
+router.get("/getAllBrands", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    db_1.default.beginTransaction((err) => {
+        if (err) {
+            return res.status(500).json({
+                success: false,
+                message: "Error starting transaction",
+                error: err,
+            });
+        }
+        // Usar DISTINCT para seleccionar solo servicios únicos por nombre
+        const query = "SELECT * FROM brands";
+        db_1.default.query(query, (err, results) => {
+            if (err) {
+                return db_1.default.rollback(() => {
+                    res.status(500).json({
+                        success: false,
+                        message: "Error fetching brands",
+                        error: err,
+                    });
+                });
+            }
+            db_1.default.commit((err) => {
+                if (err) {
+                    return db_1.default.rollback(() => {
+                        res.status(500).json({
+                            success: false,
+                            message: "Error committing transaction",
+                            error: err,
+                        });
+                    });
+                }
+                res.json(results);
+            });
+        });
+    });
+}));
+router.get("/getBrandsBySalon", (req, res) => {
+    const id_salon = req.query.id_salon;
+    // Validar que el id_salon está presente
+    if (!id_salon) {
+        return res.status(400).json({
+            success: false,
+            message: "El id_salon es requerido",
+        });
+    }
+    db_1.default.beginTransaction((err) => {
+        if (err) {
+            console.error("Error starting transaction:", err);
+            return res.status(500).json({
+                success: false,
+                message: "Error starting transaction",
+                error: err,
+            });
+        }
+        const query = `
+      SELECT bs.id_brand_salon, bs.id_salon, bs.id_brand, b.name, b.imagePath 
+      FROM brands_salon bs
+      INNER JOIN brands b ON bs.id_brand = b.id_brand
+      WHERE bs.id_salon = ?`;
+        db_1.default.query(query, [id_salon], (err, results) => {
+            if (err) {
+                console.error("Error fetching brands:", err);
+                return db_1.default.rollback(() => {
+                    res.status(500).json({
+                        success: false,
+                        message: "Error fetching brands",
+                        error: err,
+                    });
+                });
+            }
+            db_1.default.commit((err) => {
+                if (err) {
+                    console.error("Error committing transaction:", err);
+                    return db_1.default.rollback(() => {
+                        res.status(500).json({
+                            success: false,
+                            message: "Error committing transaction",
+                            error: err,
+                        });
+                    });
+                }
+                // Si todo sale bien, devolver los resultados
+                res.json(results);
+            });
+        });
+    });
+});
 router.get("/getSubservicesByService", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id_service } = req.query;
     if (!id_service) {
@@ -583,7 +672,9 @@ router.get("/getServicesWithSubservices", (req, res) => {
             if (error) {
                 console.error("Error fetching services:", error);
                 return db_1.default.rollback(() => {
-                    res.status(500).json({ error: "An error occurred while fetching data" });
+                    res
+                        .status(500)
+                        .json({ error: "An error occurred while fetching data" });
                 });
             }
             // Cambia el tipo de countResults a any[] para poder indexar el resultado
@@ -689,11 +780,11 @@ router.post("/updateReview", (req, res) => __awaiter(void 0, void 0, void 0, fun
 router.put("/updateServiceWithSubservice", (req, res) => {
     let { idSalonServiceType, idService, idServiceType, time, active } = req.body;
     // Validar que idServiceType sea un valor válido y no un objeto vacío
-    if (typeof idServiceType !== 'number' || !idServiceType) {
-        console.error('idServiceType no es válido:', idServiceType);
+    if (typeof idServiceType !== "number" || !idServiceType) {
+        console.error("idServiceType no es válido:", idServiceType);
         return res.status(400).json({
             success: false,
-            message: 'El valor de idServiceType no es válido.',
+            message: "El valor de idServiceType no es válido.",
         });
     }
     // Consulta única para actualizar los datos en la tabla
@@ -702,7 +793,13 @@ router.put("/updateServiceWithSubservice", (req, res) => {
     SET id_service = ?, id_service_type = ?, time = ?, active = ?
     WHERE id_salon_service_type = ?;
   `;
-    const queryParams = [idService, idServiceType, time, active, idSalonServiceType];
+    const queryParams = [
+        idService,
+        idServiceType,
+        time,
+        active,
+        idSalonServiceType,
+    ];
     // Imprime la consulta y los parámetros para depuración
     console.log("Consulta SQL:", updateQuery);
     console.log("Parámetros:", queryParams);
@@ -850,13 +947,13 @@ router.get("/getFaqByIdSalon", (req, res) => {
         });
     });
 });
-router.post("/updateQuestion", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.put("/updateQuestion", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { id_faq, answer } = req.body;
-        if (!id_faq || !answer) {
-            return res
-                .status(400)
-                .json({ error: "Todos los campos son requeridos." });
+        console.log("Respuesta modificada recibida:", answer);
+        if (!id_faq) {
+            console.log("Error: Falta el parámetro 'id_faq'");
+            return res.status(400).json({ error: "Falta el parámetro 'id_faq'" });
         }
         yield new Promise((resolve, reject) => {
             db_1.default.beginTransaction((err) => {
@@ -891,6 +988,50 @@ router.post("/updateQuestion", (req, res) => __awaiter(void 0, void 0, void 0, f
     catch (err) {
         console.error("Error al actualizar la pregunta:", err);
         res.status(500).json({ error: "Error al actualizar la pregunta." });
+    }
+}));
+router.put("/UpdateBrandById", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { id_brand_salon, id_brand } = req.body;
+        console.log("Id recibido:", id_brand_salon);
+        console.log("Id de marca recibido", id_brand);
+        if (!id_brand || !id_brand_salon) {
+            console.log("Error: Falta el parámetro 'id_brand'");
+            return res.status(400).json({ error: "Falta el parámetro 'id_brand'" });
+        }
+        yield new Promise((resolve, reject) => {
+            db_1.default.beginTransaction((err) => {
+                if (err)
+                    return reject(err);
+                resolve(undefined);
+            });
+        });
+        const query = `
+      UPDATE brands_salon
+      SET id_brand = ?
+      WHERE id_brand_salon = ?
+    `;
+        db_1.default.query(query, [id_brand, id_brand_salon], (error, results) => {
+            if (error) {
+                console.error("Error al actualizar la marca:", error);
+                return db_1.default.rollback(() => {
+                    res.status(500).json({ error: "Error al actualizar la marca." });
+                });
+            }
+            db_1.default.commit((err) => {
+                if (err) {
+                    console.error("Error al hacer commit:", err);
+                    return db_1.default.rollback(() => {
+                        res.status(500).json({ error: "Error al hacer commit." });
+                    });
+                }
+                res.json({ message: "Marca actualizada exitosamente." });
+            });
+        });
+    }
+    catch (err) {
+        console.error("Error al actualizar la pregunta:", err);
+        res.status(500).json({ error: "Error al actualizar la marca." });
     }
 }));
 router.post("/deleteQuestion", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -947,11 +1088,7 @@ router.get("/loadReview", (req, res) => __awaiter(void 0, void 0, void 0, functi
             });
         });
         const query = `SELECT 
-    review.id_review, 
-    review.id_user,
-    review.respuesta, 
-    review.observacion, 
-    review.qualification,
+    review.*, 
     user.name
   FROM 
     review
@@ -984,12 +1121,32 @@ router.get("/loadReview", (req, res) => __awaiter(void 0, void 0, void 0, functi
         res.status(500).json({ error: "Error al buscar el servicio." });
     }
 }));
-router.post("/updateReview", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.put("/updateReview", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { id_review, id_user, observacion, qualification } = req.body;
-        if (!id_review || !id_user || !observacion || !qualification) {
-            return res.status(400).json({ error: "Todos los campos son requeridos." });
+        const { id_review, respuesta, observacion, qualification } = req.body;
+        //console.log('Respuesta recibida:', respuesta);
+        if (!id_review || !observacion || !qualification) {
+            return res
+                .status(400)
+                .json({ error: "Todos los campos son requeridos." });
         }
+        // Agregar este log
+        // Validar que `qualification` tenga las propiedades esperadas
+        const { service, quality, cleanliness, speed } = qualification;
+        if (typeof service !== "number" ||
+            typeof quality !== "number" ||
+            typeof cleanliness !== "number" ||
+            typeof speed !== "number") {
+            return res
+                .status(400)
+                .json({ error: "Los valores de calificación son inválidos." });
+        }
+        // Función para redondear a medios
+        const redondearAMedios = (numero) => {
+            return Math.round(numero * 2) / 2;
+        };
+        // Calcular el promedio de la calificación y redondearlo a medios
+        const averageQualification = redondearAMedios((service + quality + cleanliness + speed) / 4);
         // Iniciar la transacción
         yield new Promise((resolve, reject) => {
             db_1.default.beginTransaction((err) => {
@@ -998,19 +1155,30 @@ router.post("/updateReview", (req, res) => __awaiter(void 0, void 0, void 0, fun
                 resolve(undefined);
             });
         });
-        // Actualizar la reseña sin modificar el id_salon
+        // Actualizar la reseña en la base de datos con el promedio redondeado
         const query = `
       UPDATE review
-      SET id_user = ?, observacion = ?, qualification = ?
+      SET observacion = ?, respuesta = ?, servicio = ?, calidad_precio = ?, limpieza = ?, puntualidad = ?, qualification = ? 
       WHERE id_review = ?
     `;
-        db_1.default.query(query, [id_user, observacion, qualification, id_review], (error, results) => {
+        // Ejecutar la consulta de actualización
+        db_1.default.query(query, [
+            observacion,
+            respuesta,
+            service,
+            quality,
+            cleanliness,
+            speed,
+            averageQualification, // Guardar el promedio calculado y redondeado
+            id_review,
+        ], (error, results) => {
             if (error) {
                 console.error("Error al actualizar la reseña:", error);
                 return db_1.default.rollback(() => {
                     res.status(500).json({ error: "Error al actualizar la reseña." });
                 });
             }
+            // Confirmar la transacción
             db_1.default.commit((err) => {
                 if (err) {
                     console.error("Error al hacer commit:", err);
@@ -1027,11 +1195,14 @@ router.post("/updateReview", (req, res) => __awaiter(void 0, void 0, void 0, fun
         res.status(500).json({ error: "Error al actualizar la reseña." });
     }
 }));
-router.post("/deleteReview", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.delete("/deleteReview", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { id_review } = req.body;
+        const { id_review } = req.query; // Cambiado para tomar de req.query
+        //console.log("id_review recibida:", id_review);
         if (!id_review) {
-            return res.status(400).json({ error: "El parámetro 'id_review' es requerido." });
+            return res
+                .status(400)
+                .json({ error: "El parámetro 'id_review' es requerido." });
         }
         // Iniciar la transacción
         yield new Promise((resolve, reject) => {
@@ -1096,7 +1267,9 @@ router.get("/getAllCategoriesSalon", (req, res) => __awaiter(void 0, void 0, voi
                     console.error("Error al confirmar la transacción:", commitError);
                     // Revertir la transacción en caso de error al confirmar
                     return db_1.default.rollback(() => {
-                        res.status(500).json({ error: "Error al confirmar la transacción" });
+                        res
+                            .status(500)
+                            .json({ error: "Error al confirmar la transacción" });
                     });
                 }
                 // Enviar la respuesta exitosa
@@ -1105,11 +1278,13 @@ router.get("/getAllCategoriesSalon", (req, res) => __awaiter(void 0, void 0, voi
         });
     });
 }));
-router.post('/addCategorySalon', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.post("/addCategorySalon", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id_salon, category } = req.body;
     // Validar que los campos requeridos estén presentes
     if (!id_salon || !category) {
-        return res.status(400).json({ error: 'id_salon y category son requeridos.' });
+        return res
+            .status(400)
+            .json({ error: "id_salon y category son requeridos." });
     }
     // Consulta para insertar la nueva categoría
     const insertCategoryQuery = `
@@ -1121,20 +1296,20 @@ router.post('/addCategorySalon', (req, res) => __awaiter(void 0, void 0, void 0,
         yield new Promise((resolve, reject) => {
             db_1.default.beginTransaction((transactionError) => {
                 if (transactionError) {
-                    console.error('Error al iniciar la transacción:', transactionError);
+                    console.error("Error al iniciar la transacción:", transactionError);
                     return reject(transactionError);
                 }
                 // Ejecutar la consulta para insertar la categoría
                 db_1.default.query(insertCategoryQuery, [id_salon, category], (queryError) => {
                     if (queryError) {
-                        console.error('Error al insertar la categoría:', queryError);
+                        console.error("Error al insertar la categoría:", queryError);
                         db_1.default.rollback(() => reject(queryError));
                         return;
                     }
                     // Commit de la transacción
                     db_1.default.commit((commitError) => {
                         if (commitError) {
-                            console.error('Error al hacer commit de la transacción:', commitError);
+                            console.error("Error al hacer commit de la transacción:", commitError);
                             db_1.default.rollback(() => reject(commitError));
                             return;
                         }
@@ -1144,20 +1319,22 @@ router.post('/addCategorySalon', (req, res) => __awaiter(void 0, void 0, void 0,
             });
         });
         // Respuesta de éxito
-        res.json({ message: 'Categoría añadida correctamente.' });
+        res.json({ message: "Categoría añadida correctamente." });
     }
     catch (error) {
-        console.error('Error en la transacción:', error);
-        res.status(500).json({ error: 'Ocurrió un error al añadir la categoría.' });
+        console.error("Error en la transacción:", error);
+        res.status(500).json({ error: "Ocurrió un error al añadir la categoría." });
     }
 }));
-router.put('/updateCategorySalon', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.put("/updateCategorySalon", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id_category, categories } = req.body;
     //console.log('id_category:', id_category);
     //console.log('categories:', categories);
     // Validar que los campos requeridos estén presentes
     if (!id_category || !categories) {
-        return res.status(400).json({ error: 'id_category y categories son requeridos.' });
+        return res
+            .status(400)
+            .json({ error: "id_category y categories son requeridos." });
     }
     // Consulta SQL para actualizar la categoría
     const updateCategoryQuery = `
@@ -1168,40 +1345,135 @@ router.put('/updateCategorySalon', (req, res) => __awaiter(void 0, void 0, void 
     // Forzar el tipo de resultado a ResultSetHeader
     db_1.default.query(updateCategoryQuery, [categories, id_category], (error, results) => {
         if (error) {
-            console.error('Error al actualizar la categoría:', error);
-            return res.status(500).json({ error: 'Error al actualizar la categoría.' });
+            console.error("Error al actualizar la categoría:", error);
+            return res
+                .status(500)
+                .json({ error: "Error al actualizar la categoría." });
         }
         //console.log('Resultados de la consulta:', results);
         // Acceder a affectedRows desde ResultSetHeader
         if (results.affectedRows === 0) {
-            return res.status(404).json({ error: 'Categoría no encontrada o no se pudo actualizar.' });
+            return res
+                .status(404)
+                .json({ error: "Categoría no encontrada o no se pudo actualizar." });
         }
-        res.json({ message: 'Categoría actualizada correctamente.' });
+        res.json({ message: "Categoría actualizada correctamente." });
     });
 }));
-router.delete('/deleteCategotySalon/:id_category', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.delete("/deleteCategotySalon/:id_category", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id_category } = req.params;
     // Verificar si id_category es válido
     if (!id_category) {
-        return res.status(400).json({ message: 'ID de categoría no proporcionado' });
+        return res
+            .status(400)
+            .json({ message: "ID de categoría no proporcionado" });
     }
     // Consulta SQL para eliminar la categoría
-    const deleteQuery = 'DELETE FROM categories WHERE id_category = ?';
+    const deleteQuery = "DELETE FROM categories WHERE id_category = ?";
     // Ejecutar la consulta
     db_1.default.query(deleteQuery, [id_category], (err, result) => {
         if (err) {
-            console.error('Error al eliminar la categoría:', err);
-            return res.status(500).json({ message: 'Error al eliminar la categoría' });
+            console.error("Error al eliminar la categoría:", err);
+            return res
+                .status(500)
+                .json({ message: "Error al eliminar la categoría" });
         }
         // Convertir result a OkPacket para poder acceder a affectedRows
         const okResult = result;
         // Verificar si se eliminó alguna fila comprobando affectedRows
         if (okResult.affectedRows > 0) {
-            return res.status(200).json({ message: 'Categoría eliminada exitosamente' });
+            return res
+                .status(200)
+                .json({ message: "Categoría eliminada exitosamente" });
         }
         else {
-            return res.status(404).json({ message: 'Categoría no encontrada' });
+            return res.status(404).json({ message: "Categoría no encontrada" });
         }
     });
+}));
+router.post("/addBrandToSalon", (req, res) => {
+    const { salonId, brandId } = req.body;
+    db_1.default.beginTransaction((err) => {
+        if (err) {
+            console.error("Error starting transaction:", err);
+            return res.status(500).json({
+                success: false,
+                message: "Error starting transaction",
+                error: err,
+            });
+        }
+        const insertServiceQuery = "INSERT INTO brands_salon (id_salon, id_brand) VALUES (?, ?)";
+        db_1.default.query(insertServiceQuery, [salonId, brandId], (err, result) => {
+            if (err) {
+                console.error("Error inserting service:", err);
+                return db_1.default.rollback(() => {
+                    res.status(500).json({
+                        success: false,
+                        message: "Error inserting service",
+                        error: err,
+                    });
+                });
+            }
+            db_1.default.commit((err) => {
+                if (err) {
+                    console.error("Error committing transaction:", err);
+                    return db_1.default.rollback(() => {
+                        res.status(500).json({
+                            success: false,
+                            message: "Error committing transaction",
+                            error: err,
+                        });
+                    });
+                }
+                res
+                    .status(200)
+                    .json({
+                    success: true,
+                    data: result,
+                    message: "Marca añadida al salón con éxito",
+                });
+            });
+        });
+    });
+});
+router.delete("/deleteBrandById", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { id_brand } = req.body;
+        //console.log("id_brand recibido:", id_brand);
+        if (!id_brand) {
+            return res
+                .status(400)
+                .json({ error: "El parámetro 'id_brand' es requerido." });
+        }
+        yield new Promise((resolve, reject) => {
+            db_1.default.beginTransaction((err) => {
+                if (err)
+                    return reject(err);
+                resolve(undefined);
+            });
+        });
+        const query = `DELETE FROM brands_salon WHERE id_brand = ?`;
+        db_1.default.query(query, [id_brand], (error, results) => {
+            if (error) {
+                console.error("Error al eliminar la marca:", error);
+                return db_1.default.rollback(() => {
+                    res.status(500).json({ error: "Error al eliminar la marca." });
+                });
+            }
+            db_1.default.commit((err) => {
+                if (err) {
+                    console.error("Error al hacer commit:", err);
+                    return db_1.default.rollback(() => {
+                        res.status(500).json({ error: "Error al hacer commit." });
+                    });
+                }
+                res.json({ message: "Marca eliminada exitosamente." });
+            });
+        });
+    }
+    catch (err) {
+        console.error("Error al eliminar la marca:", err);
+        res.status(500).json({ error: "Error al eliminar la marca." });
+    }
 }));
 exports.default = router;

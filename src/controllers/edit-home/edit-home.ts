@@ -4,7 +4,7 @@ import bodyParser from "body-parser";
 import { ResultSetHeader, RowDataPacket } from "mysql2";
 import { Request, Response } from "express";
 import mysql from "mysql2";
-const { ResultSetHeader } = require('mysql2');
+const { ResultSetHeader } = require("mysql2");
 import { OkPacket } from "mysql2";
 
 const router = express.Router();
@@ -95,12 +95,11 @@ router.get("/getSalonById", async (req: Request, res: Response) => {
   });
 });
 
-
 router.put("/responseReview", async (req: Request, res: Response) => {
   const { id_review, respuesta } = req.body;
 
   // Verificar que ambos campos estén presentes
-  if (!id_review || !respuesta) {
+  if (!id_review) {
     return res.status(400).json({ error: "Todos los campos son requeridos." });
   }
 
@@ -146,15 +145,13 @@ router.put("/responseReview", async (req: Request, res: Response) => {
 
     // Responder al cliente
     res.json({ message: "Respuesta actualizada exitosamente." });
-
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "Ocurrió un error al procesar la solicitud." });
+    res
+      .status(500)
+      .json({ error: "Ocurrió un error al procesar la solicitud." });
   }
-});           
-
-
-
+});
 
 router.put("/updateSalon", async (req: Request, res: Response) => {
   const {
@@ -273,9 +270,6 @@ router.put("/updateSalon", async (req: Request, res: Response) => {
     });
   }
 });
-
-
-
 
 router.get("/getProvinces", async (req: Request, res: Response) => {
   const query = `SELECT id_province, name FROM province`;
@@ -561,7 +555,7 @@ router.post("/createSalon", async (req: Request, res: Response) => {
   }
 });
 
-router.get("/getServices",async (req, res) => {
+router.get("/getServices", async (req, res) => {
   connection.beginTransaction((err) => {
     if (err) {
       return res.status(500).json({
@@ -570,7 +564,6 @@ router.get("/getServices",async (req, res) => {
         error: err,
       });
     }
-
 
     // Usar DISTINCT para seleccionar solo servicios únicos por nombre
     const query = "SELECT DISTINCT id_service, name FROM service";
@@ -602,9 +595,106 @@ router.get("/getServices",async (req, res) => {
   });
 });
 
+router.get("/getAllBrands", async (req, res) => {
+  connection.beginTransaction((err) => {
+    if (err) {
+      return res.status(500).json({
+        success: false,
+        message: "Error starting transaction",
+        error: err,
+      });
+    }
+
+    // Usar DISTINCT para seleccionar solo servicios únicos por nombre
+    const query = "SELECT * FROM brands";
+
+    connection.query(query, (err, results) => {
+      if (err) {
+        return connection.rollback(() => {
+          res.status(500).json({
+            success: false,
+            message: "Error fetching brands",
+            error: err,
+          });
+        });
+      }
+
+      connection.commit((err) => {
+        if (err) {
+          return connection.rollback(() => {
+            res.status(500).json({
+              success: false,
+              message: "Error committing transaction",
+              error: err,
+            });
+          });
+        }
+        res.json(results);
+      });
+    });
+  });
+});
+
+router.get("/getBrandsBySalon", (req, res) => {
+  const id_salon = req.query.id_salon;
+
+  // Validar que el id_salon está presente
+  if (!id_salon) {
+    return res.status(400).json({
+      success: false,
+      message: "El id_salon es requerido",
+    });
+  }
+
+  connection.beginTransaction((err) => {
+    if (err) {
+      console.error("Error starting transaction:", err);
+      return res.status(500).json({
+        success: false,
+        message: "Error starting transaction",
+        error: err,
+      });
+    }
+
+    const query = `
+      SELECT bs.id_brand_salon, bs.id_salon, bs.id_brand, b.name, b.imagePath 
+      FROM brands_salon bs
+      INNER JOIN brands b ON bs.id_brand = b.id_brand
+      WHERE bs.id_salon = ?`;
+
+    connection.query(query, [id_salon], (err, results) => {
+      if (err) {
+        console.error("Error fetching brands:", err);
+        return connection.rollback(() => {
+          res.status(500).json({
+            success: false,
+            message: "Error fetching brands",
+            error: err,
+          });
+        });
+      }
+
+      connection.commit((err) => {
+        if (err) {
+          console.error("Error committing transaction:", err);
+          return connection.rollback(() => {
+            res.status(500).json({
+              success: false,
+              message: "Error committing transaction",
+              error: err,
+            });
+          });
+        }
+
+        // Si todo sale bien, devolver los resultados
+        res.json(results);
+      });
+    });
+  });
+});
+
 router.get("/getSubservicesByService", async (req, res) => {
   const { id_service } = req.query;
-  
 
   if (!id_service) {
     return res.status(400).json({ error: "id_service is required" });
@@ -718,7 +808,8 @@ router.get("/getServicesWithSubservices", (req, res) => {
       sst.id_salon = ?
     LIMIT ?, ?`;
 
-  const countQuery = "SELECT COUNT(*) AS totalItems FROM salon_service_type WHERE id_salon = ?";
+  const countQuery =
+    "SELECT COUNT(*) AS totalItems FROM salon_service_type WHERE id_salon = ?";
 
   connection.beginTransaction((err) => {
     if (err) {
@@ -734,43 +825,48 @@ router.get("/getServicesWithSubservices", (req, res) => {
       if (error) {
         console.error("Error fetching services:", error);
         return connection.rollback(() => {
-          res.status(500).json({ error: "An error occurred while fetching data" });
+          res
+            .status(500)
+            .json({ error: "An error occurred while fetching data" });
         });
       }
 
       // Cambia el tipo de countResults a any[] para poder indexar el resultado
-      connection.query(countQuery, [id_salon], (countError, countResults: any[]) => {
-        if (countError) {
-          console.error("Error fetching count:", countError);
-          return connection.rollback(() => {
-            res.status(500).json({
-              error: "An error occurred while fetching data count",
-            });
-          });
-        }
-
-        // Asegúrate de acceder correctamente al primer elemento
-        const totalItems = countResults[0].totalItems;
-
-        connection.commit((commitErr) => {
-          if (commitErr) {
-            console.error("Error committing transaction:", commitErr);
+      connection.query(
+        countQuery,
+        [id_salon],
+        (countError, countResults: any[]) => {
+          if (countError) {
+            console.error("Error fetching count:", countError);
             return connection.rollback(() => {
               res.status(500).json({
-                success: false,
-                message: "Error committing transaction",
-                error: commitErr,
+                error: "An error occurred while fetching data count",
               });
             });
           }
 
-          res.json({ data: results, totalItems });
-        });
-      });
+          // Asegúrate de acceder correctamente al primer elemento
+          const totalItems = countResults[0].totalItems;
+
+          connection.commit((commitErr) => {
+            if (commitErr) {
+              console.error("Error committing transaction:", commitErr);
+              return connection.rollback(() => {
+                res.status(500).json({
+                  success: false,
+                  message: "Error committing transaction",
+                  error: commitErr,
+                });
+              });
+            }
+
+            res.json({ data: results, totalItems });
+          });
+        }
+      );
     });
   });
 });
-
 
 router.post("/updateReview", async (req, res) => {
   try {
@@ -858,17 +954,15 @@ router.post("/updateReview", async (req, res) => {
   }
 });
 
-
 router.put("/updateServiceWithSubservice", (req, res) => {
   let { idSalonServiceType, idService, idServiceType, time, active } = req.body;
 
- 
   // Validar que idServiceType sea un valor válido y no un objeto vacío
-  if (typeof idServiceType !== 'number' || !idServiceType) {
-    console.error('idServiceType no es válido:', idServiceType);
+  if (typeof idServiceType !== "number" || !idServiceType) {
+    console.error("idServiceType no es válido:", idServiceType);
     return res.status(400).json({
       success: false,
-      message: 'El valor de idServiceType no es válido.',
+      message: "El valor de idServiceType no es válido.",
     });
   }
 
@@ -879,7 +973,13 @@ router.put("/updateServiceWithSubservice", (req, res) => {
     WHERE id_salon_service_type = ?;
   `;
 
-  const queryParams = [idService, idServiceType, time, active, idSalonServiceType];
+  const queryParams = [
+    idService,
+    idServiceType,
+    time,
+    active,
+    idSalonServiceType,
+  ];
 
   // Imprime la consulta y los parámetros para depuración
   console.log("Consulta SQL:", updateQuery);
@@ -906,74 +1006,81 @@ router.put("/updateServiceWithSubservice", (req, res) => {
   });
 });
 
+router.delete(
+  "/deleteServiceWithSubservices/:id_salon_service_type",
+  (req, res) => {
+    const { id_salon_service_type } = req.params;
 
-
-router.delete("/deleteServiceWithSubservices/:id_salon_service_type", (req, res) => {
-  const { id_salon_service_type } = req.params;
-
-  connection.beginTransaction((err) => {
-    if (err) {
-      console.error("Error starting transaction:", err);
-      return res.status(500).json({
-        success: false,
-        message: "Error starting transaction",
-        error: err,
-      });
-    }
-
-    // Primero, elimina los subservicios asociados al servicio
-    const deleteSubservicesQuery =
-      "DELETE FROM salon_service_type WHERE id_salon_service_type = ?";
-    connection.query(deleteSubservicesQuery, [id_salon_service_type], (err) => {
+    connection.beginTransaction((err) => {
       if (err) {
-        console.error("Error deleting subservices:", err);
-        return connection.rollback(() => {
-          res.status(500).json({
-            success: false,
-            message: "Error deleting subservices",
-            error: err,
-          });
+        console.error("Error starting transaction:", err);
+        return res.status(500).json({
+          success: false,
+          message: "Error starting transaction",
+          error: err,
         });
       }
 
-      // Luego, elimina el servicio principal
-      const deleteServiceQuery = "DELETE FROM service WHERE id_service = ?";
-      connection.query(deleteServiceQuery, [id_salon_service_type], (err) => {
-        if (err) {
-          console.error("Error deleting service:", err);
-          return connection.rollback(() => {
-            res.status(500).json({
-              success: false,
-              message: "Error deleting service",
-              error: err,
-            });
-          });
-        }
-
-        // Si todo va bien, confirma la transacción
-        connection.commit((err) => {
+      // Primero, elimina los subservicios asociados al servicio
+      const deleteSubservicesQuery =
+        "DELETE FROM salon_service_type WHERE id_salon_service_type = ?";
+      connection.query(
+        deleteSubservicesQuery,
+        [id_salon_service_type],
+        (err) => {
           if (err) {
-            console.error("Error committing transaction:", err);
+            console.error("Error deleting subservices:", err);
             return connection.rollback(() => {
               res.status(500).json({
                 success: false,
-                message: "Error committing transaction",
+                message: "Error deleting subservices",
                 error: err,
               });
             });
           }
 
-          res.json({
-            success: true,
-            message: "Service and subservices deleted successfully",
-          });
-        });
-      });
+          // Luego, elimina el servicio principal
+          const deleteServiceQuery = "DELETE FROM service WHERE id_service = ?";
+          connection.query(
+            deleteServiceQuery,
+            [id_salon_service_type],
+            (err) => {
+              if (err) {
+                console.error("Error deleting service:", err);
+                return connection.rollback(() => {
+                  res.status(500).json({
+                    success: false,
+                    message: "Error deleting service",
+                    error: err,
+                  });
+                });
+              }
+
+              // Si todo va bien, confirma la transacción
+              connection.commit((err) => {
+                if (err) {
+                  console.error("Error committing transaction:", err);
+                  return connection.rollback(() => {
+                    res.status(500).json({
+                      success: false,
+                      message: "Error committing transaction",
+                      error: err,
+                    });
+                  });
+                }
+
+                res.json({
+                  success: true,
+                  message: "Service and subservices deleted successfully",
+                });
+              });
+            }
+          );
+        }
+      );
     });
-  });
-});
-
-
+  }
+);
 
 router.get("/getFaqByIdSalon", (req, res) => {
   const page = parseInt((req.query.page as string) || "1", 10);
@@ -1058,14 +1165,14 @@ router.get("/getFaqByIdSalon", (req, res) => {
   });
 });
 
-router.post("/updateQuestion", async (req, res) => {
+router.put("/updateQuestion", async (req, res) => {
   try {
     const { id_faq, answer } = req.body;
+    console.log("Respuesta modificada recibida:", answer);
 
-    if (!id_faq || !answer) {
-      return res
-        .status(400)
-        .json({ error: "Todos los campos son requeridos." });
+    if (!id_faq) {
+      console.log("Error: Falta el parámetro 'id_faq'");
+      return res.status(400).json({ error: "Falta el parámetro 'id_faq'" });
     }
 
     await new Promise((resolve, reject) => {
@@ -1105,6 +1212,59 @@ router.post("/updateQuestion", async (req, res) => {
     res.status(500).json({ error: "Error al actualizar la pregunta." });
   }
 });
+
+
+router.put("/UpdateBrandById", async (req, res) => {
+  try {
+    const { id_brand_salon, id_brand } = req.body;
+
+    console.log("Id recibido:", id_brand_salon);
+    console.log("Id de marca recibido",id_brand);
+
+    if (!id_brand ||!id_brand_salon) {
+      console.log("Error: Falta el parámetro 'id_brand'");
+      return res.status(400).json({ error: "Falta el parámetro 'id_brand'" });
+    }
+
+    await new Promise((resolve, reject) => {
+      connection.beginTransaction((err) => {
+        if (err) return reject(err);
+        resolve(undefined);
+      });
+    });
+
+    const query = `
+      UPDATE brands_salon
+      SET id_brand = ?
+      WHERE id_brand_salon = ?
+    `;
+
+    connection.query(query, [id_brand, id_brand_salon], (error, results) => {
+      if (error) {
+        console.error("Error al actualizar la marca:", error);
+        return connection.rollback(() => {
+          res.status(500).json({ error: "Error al actualizar la marca." });
+        });
+      }
+      connection.commit((err) => {
+        if (err) {
+          console.error("Error al hacer commit:", err);
+          return connection.rollback(() => {
+            res.status(500).json({ error: "Error al hacer commit." });
+          });
+        }
+
+        res.json({ message: "Marca actualizada exitosamente." });
+      });
+    });
+  } catch (err) {
+    console.error("Error al actualizar la pregunta:", err);
+    res.status(500).json({ error: "Error al actualizar la marca." });
+  }
+});
+
+
+
 
 router.post("/deleteQuestion", async (req, res) => {
   try {
@@ -1166,11 +1326,7 @@ router.get("/loadReview", async (req, res) => {
       });
     });
     const query = `SELECT 
-    review.id_review, 
-    review.id_user,
-    review.respuesta, 
-    review.observacion, 
-    review.qualification,
+    review.*, 
     user.name
   FROM 
     review
@@ -1206,18 +1362,39 @@ router.get("/loadReview", async (req, res) => {
   }
 });
 
-
-
-
-
-router.post("/updateReview", async (req, res) => {
+router.put("/updateReview", async (req, res) => {
   try {
-    const { id_review, id_user, observacion, qualification } = req.body;
+    const { id_review, respuesta, observacion, qualification } = req.body;
+    //console.log('Respuesta recibida:', respuesta);
 
-    
-    if (!id_review || !id_user || !observacion || !qualification) {
-      return res.status(400).json({ error: "Todos los campos son requeridos." });
+    if (!id_review || !observacion || !qualification) {
+      return res
+        .status(400)
+        .json({ error: "Todos los campos son requeridos." });
     }
+    // Agregar este log
+    // Validar que `qualification` tenga las propiedades esperadas
+    const { service, quality, cleanliness, speed } = qualification;
+    if (
+      typeof service !== "number" ||
+      typeof quality !== "number" ||
+      typeof cleanliness !== "number" ||
+      typeof speed !== "number"
+    ) {
+      return res
+        .status(400)
+        .json({ error: "Los valores de calificación son inválidos." });
+    }
+
+    // Función para redondear a medios
+    const redondearAMedios = (numero: number) => {
+      return Math.round(numero * 2) / 2;
+    };
+
+    // Calcular el promedio de la calificación y redondearlo a medios
+    const averageQualification = redondearAMedios(
+      (service + quality + cleanliness + speed) / 4
+    );
 
     // Iniciar la transacción
     await new Promise((resolve, reject) => {
@@ -1227,44 +1404,62 @@ router.post("/updateReview", async (req, res) => {
       });
     });
 
-    // Actualizar la reseña sin modificar el id_salon
+    // Actualizar la reseña en la base de datos con el promedio redondeado
     const query = `
       UPDATE review
-      SET id_user = ?, observacion = ?, qualification = ?
+      SET observacion = ?, respuesta = ?, servicio = ?, calidad_precio = ?, limpieza = ?, puntualidad = ?, qualification = ? 
       WHERE id_review = ?
     `;
 
-    connection.query(query, [id_user, observacion, qualification, id_review], (error, results) => {
-      if (error) {
-        console.error("Error al actualizar la reseña:", error);
-        return connection.rollback(() => {
-          res.status(500).json({ error: "Error al actualizar la reseña." });
-        });
-      }
-
-      connection.commit((err) => {
-        if (err) {
-          console.error("Error al hacer commit:", err);
+    // Ejecutar la consulta de actualización
+    connection.query(
+      query,
+      [
+        observacion,
+        respuesta,
+        service,
+        quality,
+        cleanliness,
+        speed,
+        averageQualification, // Guardar el promedio calculado y redondeado
+        id_review,
+      ],
+      (error, results) => {
+        if (error) {
+          console.error("Error al actualizar la reseña:", error);
           return connection.rollback(() => {
-            res.status(500).json({ error: "Error al hacer commit." });
+            res.status(500).json({ error: "Error al actualizar la reseña." });
           });
         }
 
-        res.json({ message: "Reseña actualizada exitosamente." });
-      });
-    });
+        // Confirmar la transacción
+        connection.commit((err) => {
+          if (err) {
+            console.error("Error al hacer commit:", err);
+            return connection.rollback(() => {
+              res.status(500).json({ error: "Error al hacer commit." });
+            });
+          }
+
+          res.json({ message: "Reseña actualizada exitosamente." });
+        });
+      }
+    );
   } catch (err) {
     console.error("Error al actualizar la reseña:", err);
     res.status(500).json({ error: "Error al actualizar la reseña." });
   }
 });
 
-router.post("/deleteReview", async (req, res) => {
+router.delete("/deleteReview", async (req, res) => {
   try {
-    const { id_review } = req.body;
+    const { id_review } = req.query; // Cambiado para tomar de req.query
 
+    //console.log("id_review recibida:", id_review);
     if (!id_review) {
-      return res.status(400).json({ error: "El parámetro 'id_review' es requerido." });
+      return res
+        .status(400)
+        .json({ error: "El parámetro 'id_review' es requerido." });
     }
 
     // Iniciar la transacción
@@ -1303,7 +1498,6 @@ router.post("/deleteReview", async (req, res) => {
   }
 });
 
-
 router.get("/getAllCategoriesSalon", async (req: Request, res: Response) => {
   const query = `
       SELECT DISTINCT categories
@@ -1312,49 +1506,53 @@ router.get("/getAllCategoriesSalon", async (req: Request, res: Response) => {
 
   // Iniciar la transacción
   connection.beginTransaction((err: Error | null) => {
-      if (err) {
-          console.error("Error iniciando la transacción:", err);
-          return res.status(500).json({ error: "Error al iniciar la transacción" });
+    if (err) {
+      console.error("Error iniciando la transacción:", err);
+      return res.status(500).json({ error: "Error al iniciar la transacción" });
+    }
+
+    // Ejecutar la consulta SQL
+    connection.query<RowDataPacket[]>(query, (error, results) => {
+      if (error) {
+        console.error("Error al obtener las categorías:", error);
+        // Revertir la transacción en caso de error
+        return connection.rollback(() => {
+          res.status(500).json({ error: "Error al obtener las categorías" });
+        });
       }
 
-      // Ejecutar la consulta SQL
-      connection.query<RowDataPacket[]>(query, (error, results) => {
-          if (error) {
-              console.error("Error al obtener las categorías:", error);
-              // Revertir la transacción en caso de error
-              return connection.rollback(() => {
-                  res.status(500).json({ error: "Error al obtener las categorías" });
-              });
-          }
+      // Procesar los resultados
+      const processedResults = results.map((row) => ({
+        category: row.categories,
+      }));
 
-          // Procesar los resultados
-          const processedResults = results.map((row) => ({
-              category: row.categories,
-          }));
-
-          // Confirmar la transacción
-          connection.commit((commitError: Error | null) => {
-              if (commitError) {
-                  console.error("Error al confirmar la transacción:", commitError);
-                  // Revertir la transacción en caso de error al confirmar
-                  return connection.rollback(() => {
-                      res.status(500).json({ error: "Error al confirmar la transacción" });
-                  });
-              }
-
-              // Enviar la respuesta exitosa
-              res.json({ data: processedResults });
+      // Confirmar la transacción
+      connection.commit((commitError: Error | null) => {
+        if (commitError) {
+          console.error("Error al confirmar la transacción:", commitError);
+          // Revertir la transacción en caso de error al confirmar
+          return connection.rollback(() => {
+            res
+              .status(500)
+              .json({ error: "Error al confirmar la transacción" });
           });
+        }
+
+        // Enviar la respuesta exitosa
+        res.json({ data: processedResults });
       });
+    });
   });
 });
 
-router.post('/addCategorySalon', async (req, res) => {
+router.post("/addCategorySalon", async (req, res) => {
   const { id_salon, category } = req.body;
 
   // Validar que los campos requeridos estén presentes
   if (!id_salon || !category) {
-    return res.status(400).json({ error: 'id_salon y category son requeridos.' });
+    return res
+      .status(400)
+      .json({ error: "id_salon y category son requeridos." });
   }
 
   // Consulta para insertar la nueva categoría
@@ -1368,41 +1566,47 @@ router.post('/addCategorySalon', async (req, res) => {
     await new Promise((resolve, reject) => {
       connection.beginTransaction((transactionError) => {
         if (transactionError) {
-          console.error('Error al iniciar la transacción:', transactionError);
+          console.error("Error al iniciar la transacción:", transactionError);
           return reject(transactionError);
         }
 
         // Ejecutar la consulta para insertar la categoría
-        connection.query(insertCategoryQuery, [id_salon, category], (queryError) => {
-          if (queryError) {
-            console.error('Error al insertar la categoría:', queryError);
-            connection.rollback(() => reject(queryError));
-            return;
-          }
-
-          // Commit de la transacción
-          connection.commit((commitError) => {
-            if (commitError) {
-              console.error('Error al hacer commit de la transacción:', commitError);
-              connection.rollback(() => reject(commitError));
+        connection.query(
+          insertCategoryQuery,
+          [id_salon, category],
+          (queryError) => {
+            if (queryError) {
+              console.error("Error al insertar la categoría:", queryError);
+              connection.rollback(() => reject(queryError));
               return;
             }
-            resolve(null);
-          });
-        });
+
+            // Commit de la transacción
+            connection.commit((commitError) => {
+              if (commitError) {
+                console.error(
+                  "Error al hacer commit de la transacción:",
+                  commitError
+                );
+                connection.rollback(() => reject(commitError));
+                return;
+              }
+              resolve(null);
+            });
+          }
+        );
       });
     });
 
     // Respuesta de éxito
-    res.json({ message: 'Categoría añadida correctamente.' });
+    res.json({ message: "Categoría añadida correctamente." });
   } catch (error) {
-    console.error('Error en la transacción:', error);
-    res.status(500).json({ error: 'Ocurrió un error al añadir la categoría.' });
+    console.error("Error en la transacción:", error);
+    res.status(500).json({ error: "Ocurrió un error al añadir la categoría." });
   }
 });
 
-
-router.put('/updateCategorySalon', async (req, res) => {
+router.put("/updateCategorySalon", async (req, res) => {
   const { id_category, categories } = req.body;
 
   //console.log('id_category:', id_category);
@@ -1410,7 +1614,9 @@ router.put('/updateCategorySalon', async (req, res) => {
 
   // Validar que los campos requeridos estén presentes
   if (!id_category || !categories) {
-    return res.status(400).json({ error: 'id_category y categories son requeridos.' });
+    return res
+      .status(400)
+      .json({ error: "id_category y categories son requeridos." });
   }
 
   // Consulta SQL para actualizar la categoría
@@ -1426,41 +1632,46 @@ router.put('/updateCategorySalon', async (req, res) => {
     [categories, id_category],
     (error, results) => {
       if (error) {
-        console.error('Error al actualizar la categoría:', error);
-        return res.status(500).json({ error: 'Error al actualizar la categoría.' });
+        console.error("Error al actualizar la categoría:", error);
+        return res
+          .status(500)
+          .json({ error: "Error al actualizar la categoría." });
       }
 
       //console.log('Resultados de la consulta:', results);
 
       // Acceder a affectedRows desde ResultSetHeader
       if (results.affectedRows === 0) {
-        return res.status(404).json({ error: 'Categoría no encontrada o no se pudo actualizar.' });
+        return res
+          .status(404)
+          .json({ error: "Categoría no encontrada o no se pudo actualizar." });
       }
 
-      res.json({ message: 'Categoría actualizada correctamente.' });
+      res.json({ message: "Categoría actualizada correctamente." });
     }
   );
 });
 
-
-
-
-router.delete('/deleteCategotySalon/:id_category', async(req, res) => {
+router.delete("/deleteCategotySalon/:id_category", async (req, res) => {
   const { id_category } = req.params;
 
   // Verificar si id_category es válido
   if (!id_category) {
-    return res.status(400).json({ message: 'ID de categoría no proporcionado' });
+    return res
+      .status(400)
+      .json({ message: "ID de categoría no proporcionado" });
   }
 
   // Consulta SQL para eliminar la categoría
-  const deleteQuery = 'DELETE FROM categories WHERE id_category = ?';
+  const deleteQuery = "DELETE FROM categories WHERE id_category = ?";
 
   // Ejecutar la consulta
   connection.query(deleteQuery, [id_category], (err, result) => {
     if (err) {
-      console.error('Error al eliminar la categoría:', err);
-      return res.status(500).json({ message: 'Error al eliminar la categoría' });
+      console.error("Error al eliminar la categoría:", err);
+      return res
+        .status(500)
+        .json({ message: "Error al eliminar la categoría" });
     }
 
     // Convertir result a OkPacket para poder acceder a affectedRows
@@ -1468,13 +1679,112 @@ router.delete('/deleteCategotySalon/:id_category', async(req, res) => {
 
     // Verificar si se eliminó alguna fila comprobando affectedRows
     if (okResult.affectedRows > 0) {
-      return res.status(200).json({ message: 'Categoría eliminada exitosamente' });
+      return res
+        .status(200)
+        .json({ message: "Categoría eliminada exitosamente" });
     } else {
-      return res.status(404).json({ message: 'Categoría no encontrada' });
+      return res.status(404).json({ message: "Categoría no encontrada" });
     }
   });
 });
 
+router.post("/addBrandToSalon", (req, res) => {
+  const { salonId, brandId } = req.body;
+
+  connection.beginTransaction((err) => {
+    if (err) {
+      console.error("Error starting transaction:", err);
+      return res.status(500).json({
+        success: false,
+        message: "Error starting transaction",
+        error: err,
+      });
+    }
+
+    const insertServiceQuery =
+      "INSERT INTO brands_salon (id_salon, id_brand) VALUES (?, ?)";
+
+    connection.query(insertServiceQuery, [salonId, brandId], (err, result) => {
+      if (err) {
+        console.error("Error inserting service:", err);
+        return connection.rollback(() => {
+          res.status(500).json({
+            success: false,
+            message: "Error inserting service",
+            error: err,
+          });
+        });
+      }
+
+      connection.commit((err) => {
+        if (err) {
+          console.error("Error committing transaction:", err);
+          return connection.rollback(() => {
+            res.status(500).json({
+              success: false,
+              message: "Error committing transaction",
+              error: err,
+            });
+          });
+        }
+        res
+          .status(200)
+          .json({
+            success: true,
+            data: result,
+            message: "Marca añadida al salón con éxito",
+          });
+      });
+    });
+  });
+});
+
+
+router.delete("/deleteBrandById", async (req, res) => {
+  try {
+    const { id_brand } = req.body;
+
+    //console.log("id_brand recibido:", id_brand);
+
+    if (!id_brand) {
+      return res
+        .status(400)
+        .json({ error: "El parámetro 'id_brand' es requerido." });
+    }
+
+    await new Promise((resolve, reject) => {
+      connection.beginTransaction((err) => {
+        if (err) return reject(err);
+        resolve(undefined);
+      });
+    });
+
+    const query = `DELETE FROM brands_salon WHERE id_brand = ?`;
+
+    connection.query(query, [id_brand], (error, results) => {
+      if (error) {
+        console.error("Error al eliminar la marca:", error);
+        return connection.rollback(() => {
+          res.status(500).json({ error: "Error al eliminar la marca." });
+        });
+      }
+
+      connection.commit((err) => {
+        if (err) {
+          console.error("Error al hacer commit:", err);
+          return connection.rollback(() => {
+            res.status(500).json({ error: "Error al hacer commit." });
+          });
+        }
+
+        res.json({ message: "Marca eliminada exitosamente." });
+      });
+    });
+  } catch (err) {
+    console.error("Error al eliminar la marca:", err);
+    res.status(500).json({ error: "Error al eliminar la marca." });
+  }
+});
 
 
 export default router;

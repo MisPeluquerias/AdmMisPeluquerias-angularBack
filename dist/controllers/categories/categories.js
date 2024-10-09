@@ -23,16 +23,11 @@ router.get("/getAllCategories", (req, res) => __awaiter(void 0, void 0, void 0, 
         const pageSize = parseInt(req.query.pageSize || "10", 10);
         const offset = (page - 1) * pageSize;
         const search = req.query.search ? `%${req.query.search}%` : "%%";
-        /*
-        console.log("Page:", page);
-        console.log("Page Size:", pageSize);
-        console.log("Offset:", offset);
-        console.log("Search Query:", search);
-      */
         const query = `
-          SELECT DISTINCT categories
+          SELECT categories, COUNT(id_salon) AS totalSalones
           FROM categories
           WHERE categories LIKE ?
+          GROUP BY categories
           LIMIT ?, ?;
       `;
         const countQuery = `
@@ -52,7 +47,6 @@ router.get("/getAllCategories", (req, res) => __awaiter(void 0, void 0, void 0, 
                         res.status(500).json({ error: "An error occurred while fetching data" });
                     });
                 }
-                //console.log("Query Results:", results);
                 db_1.default.query(countQuery, [search], (countError, countResults) => {
                     if (countError) {
                         console.error("Error fetching count:", countError);
@@ -61,11 +55,10 @@ router.get("/getAllCategories", (req, res) => __awaiter(void 0, void 0, void 0, 
                         });
                     }
                     const totalItems = countResults[0].totalItems;
-                    //console.log("Total Items:", totalItems);
                     const processedResults = results.map((row) => ({
                         category: row.categories,
+                        totalSalones: row.totalSalones,
                     }));
-                    //console.log("Processed Results:", processedResults);
                     db_1.default.commit((commitError) => {
                         if (commitError) {
                             console.error("Error committing transaction:", commitError);

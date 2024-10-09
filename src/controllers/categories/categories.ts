@@ -19,16 +19,11 @@ router.get("/getAllCategories", async (req, res) => {
       const offset = (page - 1) * pageSize;
       const search = req.query.search ? `%${req.query.search}%` : "%%";
 
-      /*
-      console.log("Page:", page);
-      console.log("Page Size:", pageSize);
-      console.log("Offset:", offset);
-      console.log("Search Query:", search);
-    */
       const query = `
-          SELECT DISTINCT categories
+          SELECT categories, COUNT(id_salon) AS totalSalones
           FROM categories
           WHERE categories LIKE ?
+          GROUP BY categories
           LIMIT ?, ?;
       `;
 
@@ -52,8 +47,6 @@ router.get("/getAllCategories", async (req, res) => {
                   });
               }
 
-              //console.log("Query Results:", results);
-
               connection.query(countQuery, [search], (countError, countResults: RowDataPacket[]) => {
                   if (countError) {
                       console.error("Error fetching count:", countError);
@@ -64,13 +57,10 @@ router.get("/getAllCategories", async (req, res) => {
 
                   const totalItems = countResults[0].totalItems;
 
-                  //console.log("Total Items:", totalItems);
-
                   const processedResults = results.map((row: any) => ({
                       category: row.categories,
+                      totalSalones: row.totalSalones,
                   }));
-
-                  //console.log("Processed Results:", processedResults);
 
                   connection.commit((commitError) => {
                       if (commitError) {
