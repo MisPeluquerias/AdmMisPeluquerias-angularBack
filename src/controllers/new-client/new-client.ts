@@ -191,7 +191,7 @@ router.post("/addNewUser", async (req: Request, res: Response) => {
       console.error("Error starting transaction:", transactionError);
       return res.status(500).json({ error: "Failed to start transaction" });
     }
-
+    //comprobacion de git
     try {
       // Encriptar la contraseña
       const hashedPassword = await bcrypt.hash(password, 10);
