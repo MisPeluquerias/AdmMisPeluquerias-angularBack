@@ -12,6 +12,7 @@ import fs from 'fs';
 
 const router = express.Router();
 router.use(bodyParser.json());
+router.use(express.urlencoded({ extended: true }));
 
 
 const storage = multer.diskStorage({
@@ -84,7 +85,7 @@ router.get("/getProvincesForNewClient", async (req: Request, res: Response) => {
             return res.status(500).json({ error: "Failed to start transaction" });
         }
 
-        const query = `SELECT id_province, name FROM province`;
+        const query = `SELECT id_province, name FROM province ORDER BY name`;
   
         connection.query(query, (queryError, results: RowDataPacket[]) => {
             if (queryError) {
@@ -134,7 +135,8 @@ router.get("/getCitiesByProvinceForNewClient", async (req: Request, res: Respons
             JOIN 
                 city c ON p.id_province = c.id_province
             WHERE 
-                p.id_province = ?;
+                p.id_province = ?
+            ORDER BY c.name;
         `;
 
         connection.query(query, [id_province], (queryError, results: RowDataPacket[]) => {
@@ -163,39 +165,26 @@ router.get("/getCitiesByProvinceForNewClient", async (req: Request, res: Respons
 
 
 
-router.post("/addNewUser", async (req: Request, res: Response) => {
-  const {
-    name,
-    lastname,
-    email,
-    phone,
-    address,
-    id_province,
-    id_city,
-    dni,
-    permiso,
-    password
-  } = req.body;
+router.post("/addNewClient", async (req: Request, res: Response) => {
+  const {name,lastname,permiso='client',email,phone,address,id_province,id_city,dni,password} = req.body; // Accede a los datos del cuerpo de la solicitud
+  //console.log('Datos recibidos en el backend:', name,lastname,email,phone,address,id_province,id_city,dni,password);
+  
 
-  console.log('datos recibidos', req.body);
 
-  // Validaciones básicas
-  if (!name || !lastname || !email || !phone || !address || !id_province || !id_city || !dni || !password || !permiso) {
-    console.log('Error: Uno o más campos están vacíos');
-    return res.status(400).json({ error: "All fields are required" });
-  }
 
+ 
+  
   // Iniciar transacción
   connection.beginTransaction(async (transactionError) => {
     if (transactionError) {
       console.error("Error starting transaction:", transactionError);
       return res.status(500).json({ error: "Failed to start transaction" });
     }
-    //comprobacion de git
+
     try {
       // Encriptar la contraseña
       const hashedPassword = await bcrypt.hash(password, 10);
-      console.log('Contraseña encriptada:', hashedPassword);
+      //console.log('Contraseña encriptada:', hashedPassword);
 
       // Insertar el nuevo usuario
       const insertUserQuery = `
@@ -249,7 +238,9 @@ router.post("/addNewUser", async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to create new user" });
       });
     }
+     
   });
+  
 });
 
 

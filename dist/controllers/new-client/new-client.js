@@ -21,6 +21,7 @@ const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const router = express_1.default.Router();
 router.use(body_parser_1.default.json());
+router.use(express_1.default.urlencoded({ extended: true }));
 const storage = multer_1.default.diskStorage({
     destination: function (req, file, cb) {
         cb(null, path_1.default.join(__dirname, '../../../dist/uploads/profile-pictures'));
@@ -80,7 +81,7 @@ router.get("/getProvincesForNewClient", (req, res) => __awaiter(void 0, void 0, 
             console.error("Error starting transaction:", transactionError);
             return res.status(500).json({ error: "Failed to start transaction" });
         }
-        const query = `SELECT id_province, name FROM province`;
+        const query = `SELECT id_province, name FROM province ORDER BY name`;
         db_1.default.query(query, (queryError, results) => {
             if (queryError) {
                 return db_1.default.rollback(() => {
@@ -121,7 +122,8 @@ router.get("/getCitiesByProvinceForNewClient", (req, res) => __awaiter(void 0, v
             JOIN 
                 city c ON p.id_province = c.id_province
             WHERE 
-                p.id_province = ?;
+                p.id_province = ?
+            ORDER BY c.name;
         `;
         db_1.default.query(query, [id_province], (queryError, results) => {
             if (queryError) {
@@ -144,14 +146,9 @@ router.get("/getCitiesByProvinceForNewClient", (req, res) => __awaiter(void 0, v
         });
     });
 }));
-router.post("/addNewUser", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { name, lastname, email, phone, address, id_province, id_city, dni, permiso, password } = req.body;
-    console.log('datos recibidos', req.body);
-    // Validaciones básicas
-    if (!name || !lastname || !email || !phone || !address || !id_province || !id_city || !dni || !password || !permiso) {
-        console.log('Error: Uno o más campos están vacíos');
-        return res.status(400).json({ error: "All fields are required" });
-    }
+router.post("/addNewClient", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { name, lastname, permiso = 'client', email, phone, address, id_province, id_city, dni, password } = req.body; // Accede a los datos del cuerpo de la solicitud
+    //console.log('Datos recibidos en el backend:', name,lastname,email,phone,address,id_province,id_city,dni,password);
     // Iniciar transacción
     db_1.default.beginTransaction((transactionError) => __awaiter(void 0, void 0, void 0, function* () {
         if (transactionError) {
@@ -161,7 +158,7 @@ router.post("/addNewUser", (req, res) => __awaiter(void 0, void 0, void 0, funct
         try {
             // Encriptar la contraseña
             const hashedPassword = yield bcrypt_1.default.hash(password, 10);
-            console.log('Contraseña encriptada:', hashedPassword);
+            //console.log('Contraseña encriptada:', hashedPassword);
             // Insertar el nuevo usuario
             const insertUserQuery = `
         INSERT INTO user (name, lastname, permiso, email, phone, address, id_province, id_city, dni, password)

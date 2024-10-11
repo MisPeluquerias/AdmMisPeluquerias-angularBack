@@ -230,7 +230,7 @@ router.put("/updateSalon", (req, res) => __awaiter(void 0, void 0, void 0, funct
     }
 }));
 router.get("/getProvinces", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const query = `SELECT id_province, name FROM province`;
+    const query = `SELECT id_province, name FROM province ORDER BY name`;
     db_1.default.query(query, (queryError, results) => {
         if (queryError) {
             console.error("Error fetching provinces:", queryError);
@@ -257,7 +257,9 @@ router.get("/getCitiesByProvince", (req, res) => __awaiter(void 0, void 0, void 
     JOIN 
       city c ON p.id_province = c.id_province
     WHERE 
-      p.id_province = ?;
+      p.id_province = ?
+    ORDER BY
+      c.name;
   `;
     db_1.default.query(query, [id_province], (queryError, results) => {
         if (queryError) {
@@ -591,7 +593,7 @@ router.get("/getSubservicesByService", (req, res) => __awaiter(void 0, void 0, v
     });
 }));
 router.post("/addService", (req, res) => {
-    const { id_salon, id_service, id_service_type, time } = req.body;
+    const { id_salon, id_service, id_service_type, time, price } = req.body;
     console.log("Datos recibidos:", req.body);
     db_1.default.beginTransaction((err) => {
         if (err) {
@@ -602,31 +604,61 @@ router.post("/addService", (req, res) => {
                 error: err,
             });
         }
-        // Inserta los datos usando los IDs correctos
-        const insertServiceQuery = "INSERT INTO salon_service_type (id_salon, id_service, id_service_type, time) VALUES (?, ?, ?, ?)";
-        db_1.default.query(insertServiceQuery, [id_salon, id_service, id_service_type, time], (err, result) => {
+        // Verificar si el id_service_type ya existe para el id_salon
+        const checkServiceTypeQuery = `
+      SELECT COUNT(*) AS count
+      FROM salon_service_type
+      WHERE id_salon = ? AND id_service_type = ?`;
+        db_1.default.query(checkServiceTypeQuery, [id_salon, id_service_type], (err, results) => {
             if (err) {
-                console.error("Error inserting service:", err);
+                console.error("Error checking service type:", err);
                 return db_1.default.rollback(() => {
                     res.status(500).json({
                         success: false,
-                        message: "Error inserting service",
+                        message: "Error checking service type",
                         error: err,
                     });
                 });
             }
-            db_1.default.commit((err) => {
+            // Asegúrate de que results es tratado como un arreglo de objetos
+            const count = results[0].count;
+            if (count > 0) {
+                // Si ya existe, no permitir duplicados
+                return db_1.default.rollback(() => {
+                    res.status(400).json({
+                        success: false,
+                        message: "Este tipo de servicio ya existe para este salón.",
+                    });
+                });
+            }
+            // Inserta los datos usando los IDs correctos
+            const insertServiceQuery = `
+        INSERT INTO salon_service_type (id_salon, id_service, id_service_type, time, price)
+        VALUES (?, ?, ?, ?, ?)`;
+            db_1.default.query(insertServiceQuery, [id_salon, id_service, id_service_type, time, price], (err, result) => {
                 if (err) {
-                    console.error("Error committing transaction:", err);
+                    console.error("Error inserting service:", err);
                     return db_1.default.rollback(() => {
                         res.status(500).json({
                             success: false,
-                            message: "Error committing transaction",
+                            message: "Error inserting service",
                             error: err,
                         });
                     });
                 }
-                res.json({ success: true, data: result });
+                db_1.default.commit((err) => {
+                    if (err) {
+                        console.error("Error committing transaction:", err);
+                        return db_1.default.rollback(() => {
+                            res.status(500).json({
+                                success: false,
+                                message: "Error committing transaction",
+                                error: err,
+                            });
+                        });
+                    }
+                    res.json({ success: true, data: result });
+                });
             });
         });
     });
@@ -647,6 +679,7 @@ router.get("/getServicesWithSubservices", (req, res) => {
       s.name AS service_name,
       sst.id_service_type,
       st.name AS subservice_name,
+      sst.price,
       sst.time,
       sst.active
     FROM 
@@ -778,47 +811,63 @@ router.post("/updateReview", (req, res) => __awaiter(void 0, void 0, void 0, fun
     }
 }));
 router.put("/updateServiceWithSubservice", (req, res) => {
-    let { idSalonServiceType, idService, idServiceType, time, active } = req.body;
+    let { idSalonServiceType, idService, idServiceType, time, price, active } = req.body;
+    console.log(req.body);
     // Validar que idServiceType sea un valor válido y no un objeto vacío
-    if (typeof idServiceType !== "number" || !idServiceType) {
+    if (!typeof idServiceType || !idServiceType) {
         console.error("idServiceType no es válido:", idServiceType);
         return res.status(400).json({
             success: false,
             message: "El valor de idServiceType no es válido.",
         });
     }
+    // Consulta para verificar si ya existe otro subservicio asignado al mismo salón
+    const checkQuery = `
+    SELECT COUNT(*) AS count
+    FROM salon_service_type
+    WHERE id_salon_service_type != ? AND id_salon = (SELECT id_salon FROM salon_service_type WHERE id_salon_service_type = ?) AND id_service_type = ?;
+  `;
+    const checkParams = [idSalonServiceType, idSalonServiceType, idServiceType];
     // Consulta única para actualizar los datos en la tabla
     const updateQuery = `
     UPDATE salon_service_type
-    SET id_service = ?, id_service_type = ?, time = ?, active = ?
+    SET id_service = ?, id_service_type = ?, time = ?, price = ?, active = ?
     WHERE id_salon_service_type = ?;
   `;
-    const queryParams = [
-        idService,
-        idServiceType,
-        time,
-        active,
-        idSalonServiceType,
-    ];
-    // Imprime la consulta y los parámetros para depuración
-    console.log("Consulta SQL:", updateQuery);
-    console.log("Parámetros:", queryParams);
-    // Ejecutar la consulta SQL
-    db_1.default.query(updateQuery, queryParams, (err, results) => {
+    const queryParams = [idService, idServiceType, time, price, active, idSalonServiceType];
+    // Verificar si ya existe otro subservicio asignado al mismo salón
+    db_1.default.query(checkQuery, checkParams, (err, results) => {
         if (err) {
-            console.error("Error updating service:", err);
-            // Revisa si hay errores específicos de la base de datos como restricciones de clave foránea
+            console.error("Error checking subservice:", err);
             return res.status(500).json({
                 success: false,
-                message: "Error updating service",
+                message: "Error checking subservice",
                 error: err,
             });
         }
-        // Respuesta exitosa
-        res.json({
-            success: true,
-            message: "Service updated successfully",
-            data: results,
+        if (results[0].count > 0) {
+            // Si ya existe otro subservicio, no permitir duplicados
+            return res.status(400).json({
+                success: false,
+                message: "El subservicio ya existe para este salón.",
+            });
+        }
+        // Ejecutar la consulta SQL para actualizar los datos
+        db_1.default.query(updateQuery, queryParams, (err, results) => {
+            if (err) {
+                console.error("Error updating service:", err);
+                return res.status(500).json({
+                    success: false,
+                    message: "Error updating service",
+                    error: err,
+                });
+            }
+            // Respuesta exitosa
+            res.json({
+                success: true,
+                message: "Service updated successfully",
+                data: results,
+            });
         });
     });
 });
@@ -833,48 +882,45 @@ router.delete("/deleteServiceWithSubservices/:id_salon_service_type", (req, res)
                 error: err,
             });
         }
-        // Primero, elimina los subservicios asociados al servicio
-        const deleteSubservicesQuery = "DELETE FROM salon_service_type WHERE id_salon_service_type = ?";
-        db_1.default.query(deleteSubservicesQuery, [id_salon_service_type], (err) => {
+        // Consulta para eliminar el subservicio en la tabla 'salon_service_type'
+        const deleteQuery = "DELETE FROM salon_service_type WHERE id_salon_service_type = ?";
+        db_1.default.query(deleteQuery, [id_salon_service_type], (err, results) => {
             if (err) {
-                console.error("Error deleting subservices:", err);
+                console.error("Error deleting record:", err);
                 return db_1.default.rollback(() => {
                     res.status(500).json({
                         success: false,
-                        message: "Error deleting subservices",
+                        message: "Error deleting the service",
                         error: err,
                     });
                 });
             }
-            // Luego, elimina el servicio principal
-            const deleteServiceQuery = "DELETE FROM service WHERE id_service = ?";
-            db_1.default.query(deleteServiceQuery, [id_salon_service_type], (err) => {
+            // Aserción de tipo para indicar que 'results' es de tipo 'ResultSetHeader'
+            const result = results;
+            // Verifica si se eliminó algún registro
+            if (result.affectedRows === 0) {
+                return db_1.default.rollback(() => {
+                    res.status(404).json({
+                        success: false,
+                        message: "No se encontró el servicio para eliminar",
+                    });
+                });
+            }
+            // Si todo va bien, confirma la transacción
+            db_1.default.commit((err) => {
                 if (err) {
-                    console.error("Error deleting service:", err);
+                    console.error("Error committing transaction:", err);
                     return db_1.default.rollback(() => {
                         res.status(500).json({
                             success: false,
-                            message: "Error deleting service",
+                            message: "Error committing transaction",
                             error: err,
                         });
                     });
                 }
-                // Si todo va bien, confirma la transacción
-                db_1.default.commit((err) => {
-                    if (err) {
-                        console.error("Error committing transaction:", err);
-                        return db_1.default.rollback(() => {
-                            res.status(500).json({
-                                success: false,
-                                message: "Error committing transaction",
-                                error: err,
-                            });
-                        });
-                    }
-                    res.json({
-                        success: true,
-                        message: "Service and subservices deleted successfully",
-                    });
+                res.json({
+                    success: true,
+                    message: "Service deleted successfully",
                 });
             });
         });
@@ -992,46 +1038,86 @@ router.put("/updateQuestion", (req, res) => __awaiter(void 0, void 0, void 0, fu
 }));
 router.put("/UpdateBrandById", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { id_brand_salon, id_brand } = req.body;
+        const { id_brand_salon, id_brand, id_salon } = req.body;
         console.log("Id recibido:", id_brand_salon);
-        console.log("Id de marca recibido", id_brand);
-        if (!id_brand || !id_brand_salon) {
-            console.log("Error: Falta el parámetro 'id_brand'");
-            return res.status(400).json({ error: "Falta el parámetro 'id_brand'" });
+        console.log("Id de marca recibido:", id_brand);
+        console.log("Id salón recibido:", id_salon);
+        if (!id_brand || !id_brand_salon || !id_salon) {
+            console.log("Error: Falta algún parámetro requerido");
+            return res.status(400).json({ error: "Faltan parámetros requeridos" });
         }
+        // Inicia la transacción
         yield new Promise((resolve, reject) => {
             db_1.default.beginTransaction((err) => {
                 if (err)
                     return reject(err);
-                resolve(undefined);
+                resolve();
             });
         });
-        const query = `
-      UPDATE brands_salon
-      SET id_brand = ?
-      WHERE id_brand_salon = ?
+        // Comprobar si la marca ya está asignada al salón
+        const checkQuery = `
+      SELECT COUNT(*) as count
+      FROM brands_salon
+      WHERE id_brand = ? AND id_salon = ?
     `;
-        db_1.default.query(query, [id_brand, id_brand_salon], (error, results) => {
-            if (error) {
-                console.error("Error al actualizar la marca:", error);
-                return db_1.default.rollback(() => {
-                    res.status(500).json({ error: "Error al actualizar la marca." });
-                });
-            }
-            db_1.default.commit((err) => {
-                if (err) {
-                    console.error("Error al hacer commit:", err);
-                    return db_1.default.rollback(() => {
-                        res.status(500).json({ error: "Error al hacer commit." });
-                    });
+        const checkResult = yield new Promise((resolve, reject) => {
+            db_1.default.query(checkQuery, [id_brand, id_salon], (error, results) => {
+                if (error) {
+                    console.error("Error al verificar la marca:", error);
+                    return db_1.default.rollback(() => reject(error));
                 }
-                res.json({ message: "Marca actualizada exitosamente." });
+                // `results` debe ser de tipo RowDataPacket[]
+                const rows = results;
+                const count = rows[0].count;
+                resolve(count);
             });
         });
+        if (checkResult > 0) {
+            console.log("La marca ya está asignada a este salón.");
+            yield new Promise((resolve, reject) => {
+                db_1.default.commit((err) => {
+                    if (err) {
+                        console.error("Error al hacer commit:", err);
+                        return db_1.default.rollback(() => reject(err));
+                    }
+                    res.status(401).json({ message: "La marca ya está asignada al salón. No se realizó la actualización." });
+                    resolve();
+                });
+            });
+        }
+        else {
+            // Si no está asignada, proceder con la actualización
+            const updateQuery = `
+        UPDATE brands_salon
+        SET id_brand = ?
+        WHERE id_brand_salon = ?
+      `;
+            yield new Promise((resolve, reject) => {
+                db_1.default.query(updateQuery, [id_brand, id_brand_salon], (error, results) => {
+                    if (error) {
+                        console.error("Error al actualizar la marca:", error);
+                        return db_1.default.rollback(() => reject(error));
+                    }
+                    resolve();
+                });
+            });
+            yield new Promise((resolve, reject) => {
+                db_1.default.commit((err) => {
+                    if (err) {
+                        console.error("Error al hacer commit:", err);
+                        return db_1.default.rollback(() => reject(err));
+                    }
+                    res.json({ message: "Marca actualizada exitosamente." });
+                    resolve();
+                });
+            });
+        }
     }
     catch (err) {
-        console.error("Error al actualizar la pregunta:", err);
-        res.status(500).json({ error: "Error al actualizar la marca." });
+        console.error("Error al actualizar la marca:", err);
+        db_1.default.rollback(() => {
+            res.status(500).json({ error: "Error al actualizar la marca." });
+        });
     }
 }));
 router.post("/deleteQuestion", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -1286,6 +1372,12 @@ router.post("/addCategorySalon", (req, res) => __awaiter(void 0, void 0, void 0,
             .status(400)
             .json({ error: "id_salon y category son requeridos." });
     }
+    // Consulta para verificar si la categoría ya existe
+    const checkCategoryQuery = `
+    SELECT COUNT(*) AS count
+    FROM categories
+    WHERE id_salon = ? AND categories = ?
+  `;
     // Consulta para insertar la nueva categoría
     const insertCategoryQuery = `
     INSERT INTO categories (id_salon, categories)
@@ -1299,21 +1391,35 @@ router.post("/addCategorySalon", (req, res) => __awaiter(void 0, void 0, void 0,
                     console.error("Error al iniciar la transacción:", transactionError);
                     return reject(transactionError);
                 }
-                // Ejecutar la consulta para insertar la categoría
-                db_1.default.query(insertCategoryQuery, [id_salon, category], (queryError) => {
-                    if (queryError) {
-                        console.error("Error al insertar la categoría:", queryError);
-                        db_1.default.rollback(() => reject(queryError));
-                        return;
+                // Verificar si la categoría ya existe
+                db_1.default.query(checkCategoryQuery, [id_salon, category], (err, results) => {
+                    if (err) {
+                        console.error("Error al verificar la categoría:", err);
+                        return db_1.default.rollback(() => reject(err));
                     }
-                    // Commit de la transacción
-                    db_1.default.commit((commitError) => {
-                        if (commitError) {
-                            console.error("Error al hacer commit de la transacción:", commitError);
-                            db_1.default.rollback(() => reject(commitError));
-                            return;
+                    if (results[0].count > 0) {
+                        // Si la categoría ya existe, no permitir duplicados
+                        return db_1.default.rollback(() => {
+                            res.status(400).json({
+                                success: false,
+                                message: "Esta categoría ya existe para este salón.",
+                            });
+                        });
+                    }
+                    // Ejecutar la consulta para insertar la categoría
+                    db_1.default.query(insertCategoryQuery, [id_salon, category], (queryError) => {
+                        if (queryError) {
+                            console.error("Error al insertar la categoría:", queryError);
+                            return db_1.default.rollback(() => reject(queryError));
                         }
-                        resolve(null);
+                        // Commit de la transacción
+                        db_1.default.commit((commitError) => {
+                            if (commitError) {
+                                console.error("Error al hacer commit de la transacción:", commitError);
+                                return db_1.default.rollback(() => reject(commitError));
+                            }
+                            resolve(null);
+                        });
                     });
                 });
             });
@@ -1326,40 +1432,54 @@ router.post("/addCategorySalon", (req, res) => __awaiter(void 0, void 0, void 0,
         res.status(500).json({ error: "Ocurrió un error al añadir la categoría." });
     }
 }));
-router.put("/updateCategorySalon", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { id_category, categories } = req.body;
-    //console.log('id_category:', id_category);
-    //console.log('categories:', categories);
-    // Validar que los campos requeridos estén presentes
-    if (!id_category || !categories) {
+router.put("/updateCategorySalon", (req, res) => {
+    const { id_category, idSalon, categories } = req.body;
+    if (!id_category || !idSalon || !categories) {
         return res
             .status(400)
-            .json({ error: "id_category y categories son requeridos." });
+            .json({ error: "id_category, idSalon y categories son requeridos." });
     }
-    // Consulta SQL para actualizar la categoría
-    const updateCategoryQuery = `
-    UPDATE categories
-    SET categories = ?
-    WHERE id_category = ?;
+    // Consulta SQL para verificar si ya existe la categoría en el salón
+    const checkCategoryQuery = `
+    SELECT COUNT(*) AS count 
+    FROM categories 
+    WHERE id_salon = ? AND categories = ? AND id_category != ?;
   `;
-    // Forzar el tipo de resultado a ResultSetHeader
-    db_1.default.query(updateCategoryQuery, [categories, id_category], (error, results) => {
+    db_1.default.query(checkCategoryQuery, [idSalon, categories, id_category], (error, results) => {
         if (error) {
-            console.error("Error al actualizar la categoría:", error);
+            console.error("Error al verificar la categoría:", error);
             return res
                 .status(500)
-                .json({ error: "Error al actualizar la categoría." });
+                .json({ error: "Error al verificar la categoría." });
         }
-        //console.log('Resultados de la consulta:', results);
-        // Acceder a affectedRows desde ResultSetHeader
-        if (results.affectedRows === 0) {
-            return res
-                .status(404)
-                .json({ error: "Categoría no encontrada o no se pudo actualizar." });
+        const count = results[0].count;
+        if (count > 0) {
+            // Si ya existe otra categoría con el mismo nombre en el mismo salón, devolver error 400 con un mensaje claro
+            return res.status(400).json({ error: "La categoría ya existe en el salón." });
         }
-        res.json({ message: "Categoría actualizada correctamente." });
+        // Consulta SQL para actualizar la categoría si no existe duplicado
+        const updateCategoryQuery = `
+        UPDATE categories
+        SET categories = ?
+        WHERE id_category = ?;
+      `;
+        db_1.default.query(updateCategoryQuery, [categories, id_category], (error, results) => {
+            if (error) {
+                console.error("Error al actualizar la categoría:", error);
+                return res
+                    .status(500)
+                    .json({ error: "Error al actualizar la categoría." });
+            }
+            const result = results;
+            if (result.affectedRows === 0) {
+                return res
+                    .status(404)
+                    .json({ error: "Categoría no encontrada o no se pudo actualizar." });
+            }
+            res.json({ message: "Categoría actualizada correctamente." });
+        });
     });
-}));
+});
 router.delete("/deleteCategotySalon/:id_category", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id_category } = req.params;
     // Verificar si id_category es válido
@@ -1402,35 +1522,64 @@ router.post("/addBrandToSalon", (req, res) => {
                 error: err,
             });
         }
-        const insertServiceQuery = "INSERT INTO brands_salon (id_salon, id_brand) VALUES (?, ?)";
-        db_1.default.query(insertServiceQuery, [salonId, brandId], (err, result) => {
+        // Consulta para verificar si la marca ya existe para el salón
+        const checkBrandQuery = `
+      SELECT COUNT(*) AS count
+      FROM brands_salon
+      WHERE id_salon = ? AND id_brand = ?;
+    `;
+        const insertServiceQuery = `
+      INSERT INTO brands_salon (id_salon, id_brand)
+      VALUES (?, ?);
+    `;
+        db_1.default.query(checkBrandQuery, [salonId, brandId], (err, results) => {
             if (err) {
-                console.error("Error inserting service:", err);
+                console.error("Error checking brand:", err);
                 return db_1.default.rollback(() => {
                     res.status(500).json({
                         success: false,
-                        message: "Error inserting service",
+                        message: "Error checking brand",
                         error: err,
                     });
                 });
             }
-            db_1.default.commit((err) => {
+            if (results[0].count > 0) {
+                // Si la marca ya existe para el salón, no permitir duplicados
+                return db_1.default.rollback(() => {
+                    res.status(400).json({
+                        success: false,
+                        message: "La marca ya existe para este salón.",
+                    });
+                });
+            }
+            // Insertar la nueva marca si no existe
+            db_1.default.query(insertServiceQuery, [salonId, brandId], (err, result) => {
                 if (err) {
-                    console.error("Error committing transaction:", err);
+                    console.error("Error inserting brand:", err);
                     return db_1.default.rollback(() => {
                         res.status(500).json({
                             success: false,
-                            message: "Error committing transaction",
+                            message: "Error inserting brand",
                             error: err,
                         });
                     });
                 }
-                res
-                    .status(200)
-                    .json({
-                    success: true,
-                    data: result,
-                    message: "Marca añadida al salón con éxito",
+                db_1.default.commit((err) => {
+                    if (err) {
+                        console.error("Error committing transaction:", err);
+                        return db_1.default.rollback(() => {
+                            res.status(500).json({
+                                success: false,
+                                message: "Error committing transaction",
+                                error: err,
+                            });
+                        });
+                    }
+                    res.status(200).json({
+                        success: true,
+                        data: result,
+                        message: "Marca añadida al salón con éxito",
+                    });
                 });
             });
         });
