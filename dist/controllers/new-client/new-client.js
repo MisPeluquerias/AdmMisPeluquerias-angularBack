@@ -164,8 +164,8 @@ router.post("/addNewClient", (req, res) => __awaiter(void 0, void 0, void 0, fun
         INSERT INTO user (name, lastname, permiso, email, phone, address, id_province, id_city, dni, password)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
-            console.log('Ejecutando consulta SQL:', insertUserQuery);
-            console.log('Valores:', [name, lastname, permiso, email, phone, address, id_province, id_city, dni, hashedPassword]);
+            //console.log('Ejecutando consulta SQL:', insertUserQuery);
+            //console.log('Valores:', ['Nombre',name,'Apellido', lastname,'Permiso', permiso,'email', email,'telefono',phone,'direccion', address,'id_provincia',id_province,'id_ciudad', id_city,'dni', dni, 'contraseña', hashedPassword]);
             db_1.default.query(insertUserQuery, [name, lastname, permiso, email, phone, address, id_province, id_city, dni, hashedPassword], (insertError, insertResults) => {
                 if (insertError) {
                     // Manejo del error de entrada duplicada

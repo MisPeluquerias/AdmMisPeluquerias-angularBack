@@ -145,33 +145,59 @@ const storage = multer.diskStorage({
     });
 });
 
-router.put('/updateClient/:id_user', (req, res) => {
-  const { id_user } = req.params;
-  const { name, lastname, email, phone, address, id_province, id_city, dni, password } = req.body;
 
-  const query = `
+
+router.put('/updateClient/:id_user', async (req, res) => {
+  const { id_user } = req.params;
+  const { name, lastname, permiso = 'client', email, phone, address, id_province, id_city, dni, password } = req.body;
+
+  try {
+    let hashedPassword = password;
+
+    // Si se proporciona una contraseña nueva, la encriptamos
+    if (password) {
+      hashedPassword = await bcrypt.hash(password, 10);
+    }
+    //console.log('hashedPassword:', hashedPassword)
+
+    const query = `
       UPDATE user
       SET 
-          name=?, 
-          lastname=?, 
-          email=?, 
-          phone=?, 
-          address=?, 
-          id_province=?, 
-          id_city=?, 
-          dni=?, 
-          password=?
-      WHERE id_user=?;
-  `;
+          name = ?, 
+          lastname = ?, 
+          email = ?, 
+          phone = ?, 
+          address = ?, 
+          id_province = ?, 
+          id_city = ?, 
+          dni = ?, 
+          password = ?
+      WHERE id_user = ?;
+    `;
 
-  connection.query(query, [name, lastname, email, phone, address, id_province, id_city, dni, password, id_user], (error) => {
+    // Realizar la consulta para actualizar el cliente
+    connection.query(query, [name, lastname, email, phone, address, id_province, id_city, dni, hashedPassword, id_user], (error) => {
       if (error) {
-          console.error('Error actualizando cliente:', error.message);
-          return res.status(500).json({ message: 'Error actualizando cliente' });
+        // Verificar si es un error de entrada duplicada (correo o DNI ya en uso)
+        if (error.code === 'ER_DUP_ENTRY') {
+          if (error.message.includes('email_UNIQUE')) {
+            return res.status(409).json({ message: 'El correo electrónico ya está registrado.' });
+          } else if (error.message.includes('dni_UNIQUE')) {
+            return res.status(409).json({ message: 'El DNI ya está registrado.' });
+          }
+        }
+
+        console.error('Error actualizando cliente:', error.message);
+        return res.status(500).json({ message: 'Error actualizando cliente' });
       }
 
       res.json({ message: 'Cliente actualizado correctamente' });
-  });
+    });
+
+  } catch (err) {
+    console.error('Error durante la actualización del cliente:', err);
+    res.status(500).json({ message: 'Error al actualizar el cliente' });
+  }
 });
 
 

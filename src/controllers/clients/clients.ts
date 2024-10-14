@@ -40,5 +40,31 @@ router.get('/getAllClients', async (req, res) => {
   });
 });
 
+router.post('/delete', (req, res) => {
+  const { id_user } = req.body;
+
+  if (!id_user || !Array.isArray(id_user) || id_user.length === 0) {
+    return res.status(400).json({ message: 'No hay clientes para eliminar' });
+  }
+
+  // Eliminar las referencias en la tabla user_salon
+  const deleteUserSalonSql = `DELETE FROM user_salon WHERE id_user IN (${id_user.map(() => '?').join(',')})`;
+  connection.query(deleteUserSalonSql, id_user, (err, result) => {
+    if (err) {
+      return res.status(500).json({ message: 'Error eliminando relaciones de clientes en user_salon' });
+    }
+
+    // Luego de eliminar las relaciones, eliminar el usuario
+    const deleteUserSql = `DELETE FROM user WHERE id_user IN (${id_user.map(() => '?').join(',')})`;
+    connection.query(deleteUserSql, id_user, (err, result) => {
+      if (err) {
+        return res.status(500).json({ message: 'Error eliminando clientes' });
+      }
+      res.status(200).json({ message: 'Clientes eliminados correctamente' });
+    });
+  });
+});
+
+
 
 export default router;

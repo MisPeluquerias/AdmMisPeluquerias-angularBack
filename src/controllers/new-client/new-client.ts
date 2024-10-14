@@ -165,14 +165,10 @@ router.get("/getCitiesByProvinceForNewClient", async (req: Request, res: Respons
 
 
 
+
 router.post("/addNewClient", async (req: Request, res: Response) => {
   const {name,lastname,permiso='client',email,phone,address,id_province,id_city,dni,password} = req.body; // Accede a los datos del cuerpo de la solicitud
   //console.log('Datos recibidos en el backend:', name,lastname,email,phone,address,id_province,id_city,dni,password);
-  
-
-
-
- 
   
   // Iniciar transacción
   connection.beginTransaction(async (transactionError) => {
@@ -191,8 +187,8 @@ router.post("/addNewClient", async (req: Request, res: Response) => {
         INSERT INTO user (name, lastname, permiso, email, phone, address, id_province, id_city, dni, password)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
-      console.log('Ejecutando consulta SQL:', insertUserQuery);
-      console.log('Valores:', [name, lastname, permiso, email, phone, address, id_province, id_city, dni, hashedPassword]);
+      //console.log('Ejecutando consulta SQL:', insertUserQuery);
+      //console.log('Valores:', ['Nombre',name,'Apellido', lastname,'Permiso', permiso,'email', email,'telefono',phone,'direccion', address,'id_provincia',id_province,'id_ciudad', id_city,'dni', dni, 'contraseña', hashedPassword]);
 
       connection.query(
         insertUserQuery,
@@ -214,7 +210,6 @@ router.post("/addNewClient", async (req: Request, res: Response) => {
 
           const newUserId = insertResults.insertId;
           console.log('Nuevo usuario creado con ID:', newUserId);
-
           // Confirmar la transacción
           connection.commit((commitError) => {
             if (commitError) {
@@ -240,7 +235,6 @@ router.post("/addNewClient", async (req: Request, res: Response) => {
     }
      
   });
-  
 });
 
 

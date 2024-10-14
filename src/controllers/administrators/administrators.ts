@@ -5,6 +5,8 @@ import bodyParser from 'body-parser';
 const router = express.Router();
 router.use(bodyParser.json());
 
+
+
 router.get('/getAllAdministrators', async (req, res) => {
   const page = parseInt(req.query.page as string || '1', 10);
   const pageSize = parseInt(req.query.pageSize as string || '10', 10);

@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const db_1 = __importDefault(require("../../db/db")); // Ajusta esta ruta según tu estructura de directorios
 const body_parser_1 = __importDefault(require("body-parser"));
+const bcrypt_1 = __importDefault(require("bcrypt"));
 const multer_1 = __importDefault(require("multer"));
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
@@ -130,31 +131,53 @@ router.get("/getCitiesByProvinceForEditClient", (req, res) => __awaiter(void 0, 
         });
     });
 }));
-router.put('/updateClient/:id_user', (req, res) => {
+router.put('/updateClient/:id_user', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id_user } = req.params;
-    const { name, lastname, email, phone, address, id_province, id_city, dni, password } = req.body;
-    const query = `
+    const { name, lastname, permiso = 'client', email, phone, address, id_province, id_city, dni, password } = req.body;
+    try {
+        let hashedPassword = password;
+        // Si se proporciona una contraseña nueva, la encriptamos
+        if (password) {
+            hashedPassword = yield bcrypt_1.default.hash(password, 10);
+        }
+        //console.log('hashedPassword:', hashedPassword)
+        const query = `
       UPDATE user
       SET 
-          name=?, 
-          lastname=?, 
-          email=?, 
-          phone=?, 
-          address=?, 
-          id_province=?, 
-          id_city=?, 
-          dni=?, 
-          password=?
-      WHERE id_user=?;
-  `;
-    db_1.default.query(query, [name, lastname, email, phone, address, id_province, id_city, dni, password, id_user], (error) => {
-        if (error) {
-            console.error('Error actualizando cliente:', error.message);
-            return res.status(500).json({ message: 'Error actualizando cliente' });
-        }
-        res.json({ message: 'Cliente actualizado correctamente' });
-    });
-});
+          name = ?, 
+          lastname = ?, 
+          email = ?, 
+          phone = ?, 
+          address = ?, 
+          id_province = ?, 
+          id_city = ?, 
+          dni = ?, 
+          password = ?
+      WHERE id_user = ?;
+    `;
+        // Realizar la consulta para actualizar el cliente
+        db_1.default.query(query, [name, lastname, email, phone, address, id_province, id_city, dni, hashedPassword, id_user], (error) => {
+            if (error) {
+                // Verificar si es un error de entrada duplicada (correo o DNI ya en uso)
+                if (error.code === 'ER_DUP_ENTRY') {
+                    if (error.message.includes('email_UNIQUE')) {
+                        return res.status(409).json({ message: 'El correo electrónico ya está registrado.' });
+                    }
+                    else if (error.message.includes('dni_UNIQUE')) {
+                        return res.status(409).json({ message: 'El DNI ya está registrado.' });
+                    }
+                }
+                console.error('Error actualizando cliente:', error.message);
+                return res.status(500).json({ message: 'Error actualizando cliente' });
+            }
+            res.json({ message: 'Cliente actualizado correctamente' });
+        });
+    }
+    catch (err) {
+        console.error('Error durante la actualización del cliente:', err);
+        res.status(500).json({ message: 'Error al actualizar el cliente' });
+    }
+}));
 router.get("/getClientById", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const id_user = req.query.id_user;
     if (!id_user) {
