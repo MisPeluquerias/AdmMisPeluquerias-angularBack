@@ -395,9 +395,9 @@ router.put('/updateStateReclamation', async (req, res) => {
   }
 });
 
-// Obtener la ruta del directorio raíz del proyecto automáticamente
-const rootPath = path.resolve(__dirname, '../../../../MisPeluquerias-angularBack/dist/uploads-reclamation');  // Ajusta según la profundidad del archivo
-const uploadsReclamationPath = path.join(rootPath);
+
+// Usamos __dirname para obtener la ruta automáticamente desde donde se ejecuta el script
+const uploadsReclamationPath = path.resolve(__dirname, '../../../../MisPeluquerias-angularBack/dist/uploads-reclamation');
 
 router.post('/delete', async (req, res) => {
   const { id_salon_reclamacion } = req.body;

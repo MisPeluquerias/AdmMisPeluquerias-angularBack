@@ -363,9 +363,8 @@ router.put('/updateStateReclamation', (req, res) => __awaiter(void 0, void 0, vo
         });
     }
 }));
-// Obtener la ruta del directorio raíz del proyecto automáticamente
-const rootPath = path_1.default.resolve(__dirname, '../../../../MisPeluquerias-angularBack/dist/uploads-reclamation'); // Ajusta según la profundidad del archivo
-const uploadsReclamationPath = path_1.default.join(rootPath);
+// Usamos __dirname para obtener la ruta automáticamente desde donde se ejecuta el script
+const uploadsReclamationPath = path_1.default.resolve(__dirname, '../../../../MisPeluquerias-angularBack/dist/uploads-reclamation');
 router.post('/delete', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id_salon_reclamacion } = req.body;
     if (!id_salon_reclamacion || !Array.isArray(id_salon_reclamacion) || id_salon_reclamacion.length === 0) {
