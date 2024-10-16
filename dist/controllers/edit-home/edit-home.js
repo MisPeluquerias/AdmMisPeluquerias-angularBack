@@ -144,7 +144,7 @@ router.put("/responseReview", (req, res) => __awaiter(void 0, void 0, void 0, fu
     }
 }));
 router.put("/updateSalon", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { id_salon, id_city, plus_code, active, state, in_vacation, name, address, latitud, longitud, email, url, phone, map, iframe, image, about_us, score_old, hours_old, zip_code_old, overview_old, } = req.body;
+    const { id_salon, id_city, plus_code, active, state, in_vacation, name, address, latitud, longitud, email, url, phone, map, iframe, image, about_us, score_old, hours_old, zip_code_old, overview_old, facebook_url, instagram_url, tiktok_url, youtube_url, } = req.body;
     if (!id_salon) {
         return res.status(400).json({ error: "id_salon is required" });
     }
@@ -170,7 +170,11 @@ router.put("/updateSalon", (req, res) => __awaiter(void 0, void 0, void 0, funct
       score_old = ?,
       hours_old = ?,
       zip_code_old = ?,
-      overview_old = ?
+      overview_old = ?,
+      facebook_url = ?,
+      instagram_url = ?,
+      tiktok_url = ?,
+      youtube_url = ?
     WHERE id_salon = ?;
   `;
     try {
@@ -201,6 +205,10 @@ router.put("/updateSalon", (req, res) => __awaiter(void 0, void 0, void 0, funct
                     hours_old,
                     zip_code_old,
                     overview_old,
+                    facebook_url,
+                    instagram_url,
+                    tiktok_url,
+                    youtube_url,
                     id_salon,
                 ], (queryError) => {
                     if (queryError) {

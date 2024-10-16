@@ -65,9 +65,18 @@ router.get('/getAllMessageContactProffesional', async (req, res) => {
 
   // Inicializa la consulta base y los parámetros de la consulta
   let query = `
-    SELECT SQL_CALC_FOUND_ROWS * 
-    FROM contact_proffesional 
-    WHERE (name LIKE ? OR email LIKE ? OR phone LIKE ? OR text LIKE ?)
+    SELECT 
+        SQL_CALC_FOUND_ROWS cp.*, 
+        c.name AS city_name, 
+        p.name AS province_name
+    FROM 
+        contact_proffesional cp
+    LEFT JOIN 
+        city c ON cp.id_city = c.id_city
+    LEFT JOIN 
+        province p ON cp.id_province = p.id_province
+    WHERE 
+        (cp.name LIKE ? OR cp.email LIKE ? OR cp.phone LIKE ? OR cp.text LIKE ?)
   `;
   const queryParams: any[] = [search, search, search, search];
 

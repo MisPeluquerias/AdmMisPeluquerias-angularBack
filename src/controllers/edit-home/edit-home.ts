@@ -177,6 +177,10 @@ router.put("/updateSalon", async (req: Request, res: Response) => {
     hours_old,
     zip_code_old,
     overview_old,
+    facebook_url,
+    instagram_url,
+    tiktok_url,
+    youtube_url,
   } = req.body;
 
   if (!id_salon) {
@@ -205,7 +209,11 @@ router.put("/updateSalon", async (req: Request, res: Response) => {
       score_old = ?,
       hours_old = ?,
       zip_code_old = ?,
-      overview_old = ?
+      overview_old = ?,
+      facebook_url = ?,
+      instagram_url = ?,
+      tiktok_url = ?,
+      youtube_url = ?
     WHERE id_salon = ?;
   `;
 
@@ -240,6 +248,10 @@ router.put("/updateSalon", async (req: Request, res: Response) => {
             hours_old,
             zip_code_old,
             overview_old,
+            facebook_url,
+            instagram_url,
+            tiktok_url,
+            youtube_url,
             id_salon,
           ],
           (queryError) => {
@@ -271,6 +283,8 @@ router.put("/updateSalon", async (req: Request, res: Response) => {
     });
   }
 });
+
+
 
 router.get("/getProvinces", async (req: Request, res: Response) => {
   const query = `SELECT id_province, name FROM province ORDER BY name`;

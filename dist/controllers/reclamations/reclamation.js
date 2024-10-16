@@ -18,6 +18,8 @@ const body_parser_1 = __importDefault(require("body-parser"));
 const nodemailer = require('nodemailer');
 const router = express_1.default.Router();
 router.use(body_parser_1.default.json());
+const fs_1 = __importDefault(require("fs"));
+const path_1 = __importDefault(require("path"));
 router.get('/getAllReclamations', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { page = '1', pageSize = '3', filterState } = req.query;
     const pageNumber = parseInt(page, 10);
@@ -359,6 +361,80 @@ router.put('/updateStateReclamation', (req, res) => __awaiter(void 0, void 0, vo
         db_1.default.rollback(() => {
             res.status(500).json({ error: 'Ocurrió un error al actualizar la reclamación o los permisos del usuario.' });
         });
+    }
+}));
+// Especifica la ruta correcta de MisPeluquerias-angularBack
+const uploadsReclamationPath = path_1.default.join(__dirname, '../../../dist/uploads-reclamation');
+router.post('/delete', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id_salon_reclamacion } = req.body;
+    if (!id_salon_reclamacion || !Array.isArray(id_salon_reclamacion) || id_salon_reclamacion.length === 0) {
+        return res.status(400).json({ message: 'No hay reclamaciones para eliminar' });
+    }
+    try {
+        // Obtener las reclamaciones para eliminar los archivos asociados
+        const selectReclamationsQuery = `
+      SELECT dnifront_path, dniback_path, file_path, invoice_path 
+      FROM salon_reclamacion 
+      WHERE id_salon_reclamacion IN (${id_salon_reclamacion.map(() => '?').join(',')})
+    `;
+        const reclamations = yield new Promise((resolve, reject) => {
+            db_1.default.query(selectReclamationsQuery, id_salon_reclamacion, (err, results) => {
+                if (err)
+                    return reject(err);
+                resolve(results);
+            });
+        });
+        // Eliminar los archivos si existen
+        for (const reclamation of reclamations) {
+            const paths = [
+                reclamation.dnifront_path,
+                reclamation.dniback_path,
+                reclamation.file_path,
+                reclamation.invoice_path
+            ];
+            for (const fileUrl of paths) {
+                if (fileUrl) {
+                    try {
+                        // Extraer el nombre del archivo desde la URL
+                        const fileName = path_1.default.basename(fileUrl); // Extrae solo el nombre del archivo
+                        const fullPath = path_1.default.join(uploadsReclamationPath, fileName); // Construir la ruta completa
+                        // Intentar eliminar el archivo desde el sistema de archivos
+                        fs_1.default.unlink(fullPath, (err) => {
+                            if (err && err.code === 'ENOENT') {
+                                console.warn(`El archivo no existe: ${fullPath}`);
+                            }
+                            else if (err) {
+                                console.error(`Error al eliminar el archivo: ${fullPath}`, err);
+                            }
+                            else {
+                                console.log(`Archivo eliminado: ${fullPath}`);
+                            }
+                        });
+                    }
+                    catch (error) {
+                        console.error(`Error al procesar la eliminación del archivo: ${fileUrl}`, error);
+                    }
+                }
+            }
+        }
+        // Eliminar las reclamaciones en la base de datos
+        const deleteReclamationsSql = `
+      DELETE FROM salon_reclamacion 
+      WHERE id_salon_reclamacion IN (${id_salon_reclamacion.map(() => '?').join(',')})
+    `;
+        yield new Promise((resolve, reject) => {
+            db_1.default.query(deleteReclamationsSql, id_salon_reclamacion, (err) => {
+                if (err)
+                    return reject(err);
+                resolve();
+            });
+        });
+        // Responder al cliente
+        res.json({ message: 'Reclamaciones e imágenes eliminadas correctamente' });
+    }
+    catch (error) {
+        console.error('Error al eliminar las reclamaciones o las imágenes:', error);
+        res.status(500).json({ message: 'Error al eliminar las reclamaciones o las imágenes' });
     }
 }));
 exports.default = router;
