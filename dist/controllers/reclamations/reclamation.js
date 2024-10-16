@@ -19,7 +19,6 @@ const nodemailer = require('nodemailer');
 const router = express_1.default.Router();
 router.use(body_parser_1.default.json());
 const fs_1 = __importDefault(require("fs"));
-const path_1 = __importDefault(require("path"));
 router.get('/getAllReclamations', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { page = '1', pageSize = '3', filterState } = req.query;
     const pageNumber = parseInt(page, 10);
@@ -363,15 +362,13 @@ router.put('/updateStateReclamation', (req, res) => __awaiter(void 0, void 0, vo
         });
     }
 }));
-// Especifica la ruta correcta de MisPeluquerias-angularBack
-const uploadsReclamationPath = path_1.default.join(__dirname, '../../../dist/uploads-reclamation');
 router.post('/delete', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id_salon_reclamacion } = req.body;
     if (!id_salon_reclamacion || !Array.isArray(id_salon_reclamacion) || id_salon_reclamacion.length === 0) {
         return res.status(400).json({ message: 'No hay reclamaciones para eliminar' });
     }
     try {
-        // Obtener las reclamaciones para eliminar los archivos asociados
+        // Obtener las rutas de las imágenes asociadas a las reclamaciones
         const selectReclamationsQuery = `
       SELECT dnifront_path, dniback_path, file_path, invoice_path 
       FROM salon_reclamacion 
@@ -384,21 +381,18 @@ router.post('/delete', (req, res) => __awaiter(void 0, void 0, void 0, function*
                 resolve(results);
             });
         });
-        // Eliminar los archivos si existen
+        // Eliminar los archivos asociados si existen
         for (const reclamation of reclamations) {
             const paths = [
-                reclamation.dnifront_path,
-                reclamation.dniback_path,
-                reclamation.file_path,
-                reclamation.invoice_path
+                reclamation.dnifront_path, // Esta ruta debe ser completa
+                reclamation.dniback_path, // Esta ruta debe ser completa
+                reclamation.file_path, // Esta ruta debe ser completa
+                reclamation.invoice_path // Esta ruta debe ser completa
             ];
-            for (const fileUrl of paths) {
-                if (fileUrl) {
+            for (const fullPath of paths) {
+                if (fullPath) {
                     try {
-                        // Extraer el nombre del archivo desde la URL
-                        const fileName = path_1.default.basename(fileUrl); // Extrae solo el nombre del archivo
-                        const fullPath = path_1.default.join(uploadsReclamationPath, fileName); // Construir la ruta completa
-                        // Intentar eliminar el archivo desde el sistema de archivos
+                        // Intentar eliminar el archivo desde el sistema de archivos usando la ruta completa
                         fs_1.default.unlink(fullPath, (err) => {
                             if (err && err.code === 'ENOENT') {
                                 console.warn(`El archivo no existe: ${fullPath}`);
@@ -412,7 +406,7 @@ router.post('/delete', (req, res) => __awaiter(void 0, void 0, void 0, function*
                         });
                     }
                     catch (error) {
-                        console.error(`Error al procesar la eliminación del archivo: ${fileUrl}`, error);
+                        console.error(`Error al procesar la eliminación del archivo: ${fullPath}`, error);
                     }
                 }
             }
