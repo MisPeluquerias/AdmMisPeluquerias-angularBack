@@ -395,8 +395,9 @@ router.put('/updateStateReclamation', async (req, res) => {
   }
 });
 
-
-
+// Obtener la ruta del directorio raíz del proyecto automáticamente
+const rootPath = path.resolve(__dirname, '../../../../MisPeluquerias-angularBack/dist/uploads-reclamation');  // Ajusta según la profundidad del archivo
+const uploadsReclamationPath = path.join(rootPath);
 
 router.post('/delete', async (req, res) => {
   const { id_salon_reclamacion } = req.body;
@@ -423,17 +424,23 @@ router.post('/delete', async (req, res) => {
     // Eliminar los archivos asociados si existen
     for (const reclamation of reclamations) {
       const paths = [
-        reclamation.dnifront_path, // Esta ruta debe ser completa
-        reclamation.dniback_path,  // Esta ruta debe ser completa
-        reclamation.file_path,     // Esta ruta debe ser completa
-        reclamation.invoice_path   // Esta ruta debe ser completa
+        reclamation.dnifront_path, // Esta es la URL completa almacenada en la base de datos
+        reclamation.dniback_path,
+        reclamation.file_path,
+        reclamation.invoice_path
       ];
 
-      for (const fullPath of paths) {
-        if (fullPath) {
+      for (const fileUrl of paths) {
+        if (fileUrl) {
           try {
-            // Intentar eliminar el archivo desde el sistema de archivos usando la ruta completa
-            fs.unlink(fullPath, (err) => {
+            // Extraer el nombre del archivo desde la URL
+            const fileName = path.basename(fileUrl); // Extrae solo el nombre del archivo
+
+            // Construir la ruta completa en el sistema de archivos
+            const fullPath = path.join(uploadsReclamationPath, fileName); 
+
+            // Intentar eliminar el archivo desde el sistema de archivos
+            fs.unlink(fullPath, (err:any) => {
               if (err && err.code === 'ENOENT') {
                 console.warn(`El archivo no existe: ${fullPath}`);
               } else if (err) {
@@ -443,7 +450,7 @@ router.post('/delete', async (req, res) => {
               }
             });
           } catch (error) {
-            console.error(`Error al procesar la eliminación del archivo: ${fullPath}`, error);
+            console.error(`Error al procesar la eliminación del archivo: ${fileUrl}`, error);
           }
         }
       }
@@ -470,6 +477,7 @@ router.post('/delete', async (req, res) => {
     res.status(500).json({ message: 'Error al eliminar las reclamaciones o las imágenes' });
   }
 });
+
 
 
 export default router;
