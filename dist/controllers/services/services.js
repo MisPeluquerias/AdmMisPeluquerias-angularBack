@@ -51,70 +51,67 @@ router.get('/getAllServices', (req, res) => __awaiter(void 0, void 0, void 0, fu
         });
     });
 }));
-router.post('/addService', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.post('/addService', (req, res) => {
     const { name, subservices } = req.body;
+    // Verificar que name y subservices existan
     if (!name || !Array.isArray(subservices) || subservices.length === 0) {
         return res.status(400).json({ error: 'Nombre del servicio y subservicios son necesarios' });
     }
-    // Usamos una transacción para asegurar que se añadan tanto el servicio como los subservicios
+    // Si subservices es un array, asegúrate de eliminar espacios en blanco de cada subservicio
+    const subservicesArray = subservices.map((subservice) => subservice.trim());
     const queryService = 'INSERT INTO service (name, id_salon) VALUES (?, 0)';
     const querySubservice = 'INSERT INTO service_type (id_service, name) VALUES (?, ?)';
-    try {
-        db_1.default.beginTransaction((transactionError) => __awaiter(void 0, void 0, void 0, function* () {
-            if (transactionError) {
-                console.error('Error starting transaction:', transactionError);
-                return res.status(500).json({ error: 'Transaction failed' });
-            }
-            // Insertar el servicio
-            db_1.default.query(queryService, [name], (error, result) => {
-                if (error) {
-                    db_1.default.rollback(() => {
-                        console.error('Error inserting service:', error);
-                        res.status(500).json({ error: 'Error inserting service' });
-                    });
-                    return;
-                }
-                const serviceId = result.insertId; // Asegúrate de obtener el serviceId correctamente
-                // Insertar los subservicios asociados
-                const subservicePromises = subservices.map(subservice => {
-                    return new Promise((resolve, reject) => {
-                        db_1.default.query(querySubservice, [serviceId, subservice], (subError, subResult) => {
-                            if (subError) {
-                                return reject(subError);
-                            }
-                            resolve(subResult);
-                        });
-                    });
+    // Iniciar la transacción
+    db_1.default.beginTransaction((transactionError) => {
+        if (transactionError) {
+            console.error('Error al iniciar la transacción:', transactionError);
+            return res.status(500).json({ error: 'Error al iniciar la transacción' });
+        }
+        // Insertar el servicio
+        db_1.default.query(queryService, [name], (serviceError, result) => {
+            if (serviceError) {
+                db_1.default.rollback(() => {
+                    console.error('Error al insertar el servicio:', serviceError);
+                    return res.status(500).json({ error: 'Error al insertar el servicio' });
                 });
-                // Ejecutar todas las promesas de inserción de subservicios
-                Promise.all(subservicePromises)
-                    .then(() => {
-                    db_1.default.commit(commitError => {
-                        if (commitError) {
-                            db_1.default.rollback(() => {
-                                console.error('Error committing transaction:', commitError);
-                                res.status(500).json({ error: 'Error committing transaction' });
-                            });
+                return;
+            }
+            const serviceId = result.insertId;
+            // Insertar subservicios asociados
+            const subservicePromises = subservicesArray.map((subservice) => {
+                return new Promise((resolve, reject) => {
+                    db_1.default.query(querySubservice, [serviceId, subservice], (subError) => {
+                        if (subError) {
+                            return reject(subError);
                         }
-                        else {
-                            res.status(201).json({ message: 'Servicio y subservicios creados con éxito' });
-                        }
-                    });
-                })
-                    .catch(subserviceError => {
-                    db_1.default.rollback(() => {
-                        console.error('Error inserting subservices:', subserviceError);
-                        res.status(500).json({ error: 'Error inserting subservices' });
+                        resolve();
                     });
                 });
             });
-        }));
-    }
-    catch (error) {
-        console.error('Error creating service and subservices:', error);
-        res.status(500).json({ error: 'Error creating service and subservices' });
-    }
-}));
+            // Ejecutar todas las inserciones de subservicios
+            Promise.all(subservicePromises)
+                .then(() => {
+                db_1.default.commit((commitError) => {
+                    if (commitError) {
+                        db_1.default.rollback(() => {
+                            console.error('Error al confirmar la transacción:', commitError);
+                            return res.status(500).json({ error: 'Error al confirmar la transacción' });
+                        });
+                    }
+                    else {
+                        return res.status(201).json({ message: 'Servicio y subservicios creados con éxito' });
+                    }
+                });
+            })
+                .catch((subserviceError) => {
+                db_1.default.rollback(() => {
+                    console.error('Error al insertar los subservicios:', subserviceError);
+                    return res.status(500).json({ error: 'Error al insertar los subservicios' });
+                });
+            });
+        });
+    });
+});
 router.delete("/deleteServiceWithSubservices/:id_service", (req, res) => {
     const { id_service } = req.params;
     db_1.default.beginTransaction((err) => {

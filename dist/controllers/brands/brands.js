@@ -22,7 +22,7 @@ const router = express_1.default.Router();
 router.use(body_parser_1.default.json());
 const storage = multer_1.default.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, path_1.default.resolve(__dirname, '../../../dist/uploads/brands-pictures'));
+        cb(null, path_1.default.resolve(__dirname, "../../../dist/uploads/brands-pictures"));
     },
     filename: (req, file, cb) => {
         // Generar un nombre de archivo único con un prefijo y marca de tiempo
@@ -33,11 +33,13 @@ const storage = multer_1.default.diskStorage({
 const upload = (0, multer_1.default)({
     storage: storage,
     fileFilter: (req, file, cb) => {
-        if (file.mimetype === 'image/jpeg' || file.mimetype === 'image/png' || file.mimetype === 'image/gif') {
+        if (file.mimetype === "image/jpeg" ||
+            file.mimetype === "image/png" ||
+            file.mimetype === "image/gif") {
             cb(null, true);
         }
         else {
-            cb(new Error('Invalid file type. Only JPEG, PNG, and GIF are allowed.'));
+            cb(new Error("Invalid file type. Only JPEG, PNG, and GIF are allowed."));
         }
     },
 });
@@ -48,50 +50,66 @@ router.get("/getAllBrands", (req, res) => __awaiter(void 0, void 0, void 0, func
         const offset = (page - 1) * pageSize;
         const search = req.query.search ? `%${req.query.search}%` : "%%";
         const query = `
-          SELECT b.id_brand, b.name, b.imagePath, b.active, COUNT(sb.id_salon) AS totalSalones
-          FROM brands b
-          LEFT JOIN brands_salon sb ON b.id_brand = sb.id_brand
-          WHERE b.name LIKE ?
-          GROUP BY b.id_brand
-          LIMIT ?, ?;
-      `;
+    SELECT b.id_brand, b.name, b.imagePath, b.active, COUNT(sb.id_salon) AS totalSalones, 
+           GROUP_CONCAT(bc.category SEPARATOR ', ') AS categories
+    FROM brands b
+    LEFT JOIN brands_salon sb ON b.id_brand = sb.id_brand
+    LEFT JOIN brands_categories bc ON b.id_brand = bc.id_brand
+    WHERE b.name LIKE ?
+    GROUP BY b.id_brand
+    LIMIT ?, ?;
+  `;
         const countQuery = `
-          SELECT COUNT(*) AS totalItems 
-          FROM brands 
-          WHERE name LIKE ?;
-      `;
+      SELECT COUNT(*) AS totalItems 
+      FROM brands 
+      WHERE name LIKE ?;
+    `;
         db_1.default.beginTransaction((err) => {
             if (err) {
                 console.error("Error starting transaction:", err);
-                return res.status(500).json({ error: "An error occurred while starting transaction" });
+                return res
+                    .status(500)
+                    .json({ error: "An error occurred while starting transaction" });
             }
             db_1.default.query(query, [search, offset, pageSize], (error, results) => {
                 if (error) {
                     console.error("Error fetching data:", error);
                     return db_1.default.rollback(() => {
-                        res.status(500).json({ error: "An error occurred while fetching data" });
+                        res
+                            .status(500)
+                            .json({ error: "An error occurred while fetching data" });
                     });
                 }
                 db_1.default.query(countQuery, [search], (countError, countResults) => {
                     if (countError) {
                         console.error("Error fetching count:", countError);
                         return db_1.default.rollback(() => {
-                            res.status(500).json({ error: "An error occurred while fetching data count" });
+                            res
+                                .status(500)
+                                .json({
+                                error: "An error occurred while fetching data count",
+                            });
                         });
                     }
                     const totalItems = countResults[0].totalItems;
+                    // Procesar resultados y añadir las categorías
                     const processedResults = results.map((row) => ({
                         id_brand: row.id_brand,
                         name: row.name,
                         imagePath: row.imagePath,
                         active: row.active,
-                        totalSalones: row.totalSalones
+                        totalSalones: row.totalSalones,
+                        categories: row.categories || '', // Devolver las categorías separadas por comas
                     }));
                     db_1.default.commit((commitError) => {
                         if (commitError) {
                             console.error("Error committing transaction:", commitError);
                             return db_1.default.rollback(() => {
-                                res.status(500).json({ error: "An error occurred while committing transaction" });
+                                res
+                                    .status(500)
+                                    .json({
+                                    error: "An error occurred while committing transaction",
+                                });
                             });
                         }
                         res.json({ data: processedResults, totalItems });
@@ -105,174 +123,194 @@ router.get("/getAllBrands", (req, res) => __awaiter(void 0, void 0, void 0, func
         res.status(500).json({ error: "An unexpected error occurred" });
     }
 }));
-router.post('/addBrand', upload.single('brandImage'), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.get("/searchCategoryInLive", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        //console.log('Archivo recibido:', req.file); // Debe mostrar información sobre el archivo
-        //console.log('Datos recibidos:', req.body); // Debe mostrar el nombre de la marca
-        const { name } = req.body;
+        const { category } = req.query;
+        if (!category) {
+            return res
+                .status(400)
+                .json({ error: "El parámetro 'category' es requerido." });
+        }
+        // Iniciar la transacción
+        yield new Promise((resolve, reject) => {
+            db_1.default.beginTransaction((err) => {
+                if (err)
+                    return reject(err);
+                resolve(undefined);
+            });
+        });
+        const query = "SELECT DISTINCT categories FROM categories WHERE categories LIKE ?";
+        db_1.default.query(query, [`%${category}%`], (error, results) => {
+            if (error) {
+                console.error("Error al buscar la categoria:", error);
+                return db_1.default.rollback(() => {
+                    res.status(500).json({ error: "Error al buscar categoria." });
+                });
+            }
+            db_1.default.commit((err) => {
+                if (err) {
+                    console.error("Error al hacer commit:", err);
+                    return db_1.default.rollback(() => {
+                        res.status(500).json({ error: "Error al buscar categoria." });
+                    });
+                }
+                res.json(results);
+            });
+        });
+    }
+    catch (err) {
+        console.error("Error al buscar categoria:", err);
+        res.status(500).json({ error: "Error al buscar la categoria." });
+    }
+}));
+router.post("/addBrand", upload.single("brandImage"), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { name, categories } = req.body; // Recibir las categorías desde el cliente
         const brandImage = req.file;
         if (!name) {
-            return res.status(400).json({ error: 'El nombre de la marca es requerido' });
+            return res
+                .status(400)
+                .json({ error: "El nombre de la marca es requerido" });
         }
         if (!brandImage) {
-            return res.status(400).json({ error: 'La imagen es requerida' });
+            return res.status(400).json({ error: "La imagen es requerida" });
+        }
+        // Asegurarse de que las categorías están parseadas correctamente si vienen como JSON string
+        let parsedCategories;
+        if (typeof categories === "string") {
+            try {
+                parsedCategories = JSON.parse(categories);
+            }
+            catch (err) {
+                return res
+                    .status(400)
+                    .json({ error: "El formato de las categorías es incorrecto" });
+            }
+        }
+        else {
+            parsedCategories = categories;
         }
         // Construir la URL completa basada en el servidor
-        const serverUrl = `${req.protocol}://${req.get('host')}`;
+        const serverUrl = `${req.protocol}://${req.get("host")}`;
         const imageUrl = `${serverUrl}/uploads/brands-pictures/${brandImage.filename}`;
-        const query = `
+        const insertBrandQuery = `
       INSERT INTO brands (name, imagePath, active)
       VALUES (?, ?, ?);
     `;
         db_1.default.beginTransaction((err) => {
             if (err) {
-                console.error('Error al iniciar la transacción:', err);
-                return res.status(500).json({ error: 'Ocurrió un error al iniciar la transacción' });
+                console.error("Error al iniciar la transacción:", err);
+                return res
+                    .status(500)
+                    .json({ error: "Ocurrió un error al iniciar la transacción" });
             }
-            db_1.default.query(query, [name, imageUrl, 1], // El valor de "active" es 1 por defecto
+            // Insertar la marca
+            db_1.default.query(insertBrandQuery, [name, imageUrl, 1], // El valor de "active" es 1 por defecto
             (error, results) => {
                 if (error) {
-                    console.error('Error al insertar los datos:', error);
+                    console.error("Error al insertar los datos:", error);
                     return db_1.default.rollback(() => {
-                        res.status(500).json({ error: 'Ocurrió un error al insertar los datos' });
+                        res
+                            .status(500)
+                            .json({ error: "Ocurrió un error al insertar los datos" });
                     });
                 }
-                db_1.default.commit((commitError) => {
-                    if (commitError) {
-                        console.error('Error al confirmar la transacción:', commitError);
+                const brandId = results.insertId; // Obtener el ID de la marca insertada
+                // Si no hay categorías, continuar con el commit
+                if (!parsedCategories || parsedCategories.length === 0) {
+                    return db_1.default.commit((commitError) => {
+                        if (commitError) {
+                            console.error("Error al confirmar la transacción:", commitError);
+                            return db_1.default.rollback(() => {
+                                res
+                                    .status(500)
+                                    .json({
+                                    error: "Ocurrió un error al confirmar la transacción",
+                                });
+                            });
+                        }
+                        res.status(201).json({ message: "Marca añadida exitosamente" });
+                    });
+                }
+                // Insertar las categorías asociadas
+                const insertCategoriesQuery = `
+            INSERT INTO brands_categories (id_brand, category)
+            VALUES ?
+          `;
+                // Preparar los valores a insertar
+                const categoryValues = parsedCategories.map((category) => [
+                    brandId,
+                    category,
+                ]);
+                db_1.default.query(insertCategoriesQuery, [categoryValues], (catError, catResults) => {
+                    if (catError) {
+                        console.error("Error al insertar las categorías:", catError);
                         return db_1.default.rollback(() => {
-                            res.status(500).json({ error: 'Ocurrió un error al confirmar la transacción' });
+                            res
+                                .status(500)
+                                .json({
+                                error: "Ocurrió un error al insertar las categorías",
+                            });
                         });
                     }
-                    res.status(201).json({ message: 'Marca añadida exitosamente' });
+                    // Confirmar la transacción si todo fue exitoso
+                    db_1.default.commit((commitError) => {
+                        if (commitError) {
+                            console.error("Error al confirmar la transacción:", commitError);
+                            return db_1.default.rollback(() => {
+                                res
+                                    .status(500)
+                                    .json({
+                                    error: "Ocurrió un error al confirmar la transacción",
+                                });
+                            });
+                        }
+                        res
+                            .status(201)
+                            .json({
+                            message: "Marca y categorías añadidas exitosamente",
+                        });
+                    });
                 });
             });
         });
     }
     catch (err) {
-        console.error('Error inesperado:', err);
-        res.status(500).json({ error: 'Ocurrió un error inesperado' });
+        console.error("Error inesperado:", err);
+        res.status(500).json({ error: "Ocurrió un error inesperado" });
     }
 }));
-router.put("/updateBrand", upload.single('brandImage'), (req, res) => {
-    //console.log("Iniciando actualización de marca..."); // Depuración
-    //console.log("Archivo recibido:", req.file); // Depuración para ver el archivo recibido
-    //console.log("Datos recibidos:", req.body); // Depuración para ver los datos recibidos
-    const { id_brand, name } = req.body;
-    const brandImage = req.file;
-    // Validar que se proporcionen el ID y el nuevo nombre
-    if (!id_brand || !name) {
-        console.error("Faltan id_brand o name en la solicitud."); // Depuración
-        return res.status(400).json({ message: "id_brand y name son requeridos" });
-    }
-    // Validar que la imagen haya sido subida
-    if (!brandImage) {
-        console.error("No se ha proporcionado una imagen de marca."); // Depuración
-        return res.status(400).json({ message: "La imagen de la marca es requerida" });
-    }
-    // Iniciar la transacción
-    db_1.default.beginTransaction((err) => {
-        if (err) {
-            console.error("Error iniciando la transacción:", err); // Depuración
-            return res.status(500).json({ message: "Error al iniciar la transacción" });
-        }
-        // Primero, obtener la ruta de la imagen antigua
-        const selectQuery = `SELECT imagePath FROM brands WHERE id_brand = ?`;
-        db_1.default.query(selectQuery, [id_brand], (selectError, selectResults) => {
-            if (selectError) {
-                console.error("Error al obtener la ruta de la imagen antigua:", selectError); // Depuración
-                return db_1.default.rollback(() => {
-                    res.status(500).json({ message: "Error al obtener la ruta de la imagen antigua" });
-                });
-            }
-            if (selectResults.length === 0) {
-                console.error("Marca no encontrada con el id proporcionado."); // Depuración
-                return db_1.default.rollback(() => {
-                    res.status(404).json({ message: "Marca no encontrada" });
-                });
-            }
-            const oldImagePath = selectResults[0].imagePath;
-            const oldFileName = path_1.default.basename(oldImagePath);
-            const oldFilePath = path_1.default.join(__dirname, '../../../dist/uploads/brands-pictures', oldFileName);
-            // Construir la URL de la nueva imagen
-            const serverUrl = `${req.protocol}://${req.get('host')}`;
-            const newImageUrl = `${serverUrl}/uploads/brands-pictures/${brandImage.filename}`;
-            // Consulta para actualizar el nombre y la imagen de la marca
-            const updateQuery = `
-        UPDATE brands
-        SET name = ?, imagePath = ?
-        WHERE id_brand = ?;
-      `;
-            db_1.default.query(updateQuery, [name, newImageUrl, id_brand], (updateError, results) => {
-                if (updateError) {
-                    console.error("Error al actualizar la marca:", updateError); // Depuración
-                    return db_1.default.rollback(() => {
-                        res.status(500).json({ message: "Error al actualizar la marca" });
-                    });
-                }
-                if (results.affectedRows === 0) {
-                    console.error("No se encontraron marcas para actualizar."); // Depuración
-                    return db_1.default.rollback(() => {
-                        res.status(404).json({ message: "Marca no encontrada" });
-                    });
-                }
-                // Eliminar la imagen antigua del sistema de archivos si existe
-                fs_1.default.access(oldFilePath, fs_1.default.constants.F_OK, (accessErr) => {
-                    if (!accessErr) {
-                        fs_1.default.unlink(oldFilePath, (unlinkErr) => {
-                            if (unlinkErr) {
-                                console.error("Error al eliminar la imagen antigua:", unlinkErr); // Depuración
-                                // Continuar sin hacer rollback ya que no afecta la base de datos
-                            }
-                            else {
-                                console.log("Imagen antigua eliminada exitosamente."); // Depuración
-                            }
-                        });
-                    }
-                    else {
-                        console.warn("La imagen antigua no existe en el servidor, nada que eliminar."); // Depuración
-                    }
-                });
-                // Confirmar la transacción
-                db_1.default.commit((commitErr) => {
-                    if (commitErr) {
-                        console.error("Error al confirmar la transacción:", commitErr); // Depuración
-                        return db_1.default.rollback(() => {
-                            res.status(500).json({ message: "Error al confirmar la transacción" });
-                        });
-                    }
-                    //console.log("Marca actualizada con éxito."); // Depuración
-                    res.status(200).json({ message: "Marca actualizada con éxito" });
-                });
-            });
-        });
-    });
-});
-router.post('/deleteBrand', (req, res) => {
+router.post("/deleteBrand", (req, res) => {
     const { id_brand } = req.body;
     // Validar que se proporcionen los IDs y que sea un array válido
     if (!id_brand || !Array.isArray(id_brand) || id_brand.length === 0) {
-        return res.status(400).json({ message: 'No hay marcas para eliminar' });
+        return res.status(400).json({ message: "No hay marcas para eliminar" });
     }
     // Iniciar la transacción
     db_1.default.beginTransaction((err) => {
         if (err) {
-            console.error('Error iniciando la transacción:', err);
-            return res.status(500).json({ message: 'Error al iniciar la transacción' });
+            console.error("Error iniciando la transacción:", err);
+            return res
+                .status(500)
+                .json({ message: "Error al iniciar la transacción" });
         }
         // Consulta para obtener las rutas de las imágenes de las marcas que se van a eliminar
         const selectQuery = `SELECT imagePath FROM brands WHERE id_brand IN (?)`;
         db_1.default.query(selectQuery, [id_brand], (selectError, selectResults) => {
             if (selectError) {
-                console.error('Error al obtener las rutas de las imágenes:', selectError);
+                console.error("Error al obtener las rutas de las imágenes:", selectError);
                 return db_1.default.rollback(() => {
-                    res.status(500).json({ message: 'Error al obtener las rutas de las imágenes' });
+                    res
+                        .status(500)
+                        .json({ message: "Error al obtener las rutas de las imágenes" });
                 });
             }
             if (selectResults.length === 0) {
-                console.error('No se encontraron marcas con los IDs proporcionados.');
+                console.error("No se encontraron marcas con los IDs proporcionados.");
                 return db_1.default.rollback(() => {
-                    res.status(404).json({ message: 'No se encontraron marcas para eliminar' });
+                    res
+                        .status(404)
+                        .json({ message: "No se encontraron marcas para eliminar" });
                 });
             }
             // Procesar cada marca encontrada
@@ -280,7 +318,7 @@ router.post('/deleteBrand', (req, res) => {
                 const fileUrl = row.imagePath;
                 const fileName = path_1.default.basename(fileUrl);
                 // Construir la ruta del archivo en el sistema de archivos
-                const filePath = path_1.default.join(__dirname, '../../uploads/brands-pictures', fileName);
+                const filePath = path_1.default.join(__dirname, "../../uploads/brands-pictures", fileName);
                 // Verificar si el archivo existe
                 fs_1.default.access(filePath, fs_1.default.constants.F_OK, (accessErr) => {
                     if (accessErr) {
@@ -300,34 +338,154 @@ router.post('/deleteBrand', (req, res) => {
                     });
                 });
             });
-            // Eliminar las marcas de la base de datos
-            const deleteQuery = `DELETE FROM brands WHERE id_brand IN (?)`;
-            db_1.default.query(deleteQuery, [id_brand], (deleteError, deleteResults) => {
-                if (deleteError) {
-                    console.error('Error al eliminar las marcas:', deleteError);
+            // Primero, eliminar las categorías asociadas en `brands_categories`
+            const deleteCategoriesQuery = `DELETE FROM brands_categories WHERE id_brand IN (?)`;
+            db_1.default.query(deleteCategoriesQuery, [id_brand], (deleteCatError) => {
+                if (deleteCatError) {
+                    console.error("Error al eliminar las categorías asociadas:", deleteCatError);
                     return db_1.default.rollback(() => {
-                        res.status(500).json({ message: 'Error al eliminar las marcas' });
+                        res
+                            .status(500)
+                            .json({
+                            message: "Error al eliminar las categorías asociadas",
+                        });
                     });
                 }
-                if (deleteResults.affectedRows === 0) {
-                    console.error('No se encontraron marcas para eliminar.');
-                    return db_1.default.rollback(() => {
-                        res.status(404).json({ message: 'No se encontraron marcas para eliminar' });
-                    });
-                }
-                // Confirmar la transacción
-                db_1.default.commit((commitErr) => {
-                    if (commitErr) {
-                        console.error('Error al confirmar la transacción:', commitErr);
+                // Eliminar las marcas de la base de datos
+                const deleteQuery = `DELETE FROM brands WHERE id_brand IN (?)`;
+                db_1.default.query(deleteQuery, [id_brand], (deleteError, deleteResults) => {
+                    if (deleteError) {
+                        console.error("Error al eliminar las marcas:", deleteError);
                         return db_1.default.rollback(() => {
-                            res.status(500).json({ message: 'Error al confirmar la transacción' });
+                            res
+                                .status(500)
+                                .json({ message: "Error al eliminar las marcas" });
                         });
                     }
-                    //console.log('Marcas e imágenes eliminadas con éxito');
-                    res.status(200).json({ message: 'Marcas e imágenes eliminadas con éxito' });
+                    if (deleteResults.affectedRows === 0) {
+                        console.error("No se encontraron marcas para eliminar.");
+                        return db_1.default.rollback(() => {
+                            res
+                                .status(404)
+                                .json({
+                                message: "No se encontraron marcas para eliminar",
+                            });
+                        });
+                    }
+                    // Confirmar la transacción
+                    db_1.default.commit((commitErr) => {
+                        if (commitErr) {
+                            console.error("Error al confirmar la transacción:", commitErr);
+                            return db_1.default.rollback(() => {
+                                res
+                                    .status(500)
+                                    .json({ message: "Error al confirmar la transacción" });
+                            });
+                        }
+                        //console.log('Marcas e imágenes eliminadas con éxito');
+                        res
+                            .status(200)
+                            .json({
+                            message: "Marcas e imágenes eliminadas con éxito",
+                        });
+                    });
                 });
             });
         });
     });
 });
+router.put("/updateBrand/:id", upload.single("brandImage"), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id } = req.params;
+    const { name, categories } = req.body; // Recibir las categorías desde el cliente
+    const brandImage = req.file;
+    if (!name) {
+        return res.status(400).json({ error: "El nombre de la marca es requerido" });
+    }
+    // Asegurarse de que las categorías están parseadas correctamente si vienen como JSON string
+    let parsedCategories;
+    if (typeof categories === "string") {
+        try {
+            parsedCategories = JSON.parse(categories);
+        }
+        catch (err) {
+            return res.status(400).json({ error: "El formato de las categorías es incorrecto" });
+        }
+    }
+    else {
+        parsedCategories = categories;
+    }
+    // Construir la URL completa basada en el servidor
+    const serverUrl = `${req.protocol}://${req.get("host")}`;
+    const imageUrl = brandImage ? `${serverUrl}/uploads/brands-pictures/${brandImage.filename}` : null;
+    const updateBrandQuery = `
+    UPDATE brands 
+    SET name = ?, ${brandImage ? "imagePath = ?," : ""} active = ?
+    WHERE id_brand = ?;
+  `;
+    db_1.default.beginTransaction((err) => {
+        if (err) {
+            console.error("Error al iniciar la transacción:", err);
+            return res.status(500).json({ error: "Ocurrió un error al iniciar la transacción" });
+        }
+        // Actualizar la marca (sin tocar las categorías aún)
+        db_1.default.query(updateBrandQuery, brandImage ? [name, imageUrl, 1, id] : [name, 1, id], (error, results) => {
+            if (error) {
+                console.error("Error al actualizar los datos:", error);
+                return db_1.default.rollback(() => {
+                    res.status(500).json({ error: "Ocurrió un error al actualizar los datos" });
+                });
+            }
+            // Eliminar las categorías antiguas
+            const deleteCategoriesQuery = `DELETE FROM brands_categories WHERE id_brand = ?`;
+            db_1.default.query(deleteCategoriesQuery, [id], (deleteError) => {
+                if (deleteError) {
+                    console.error("Error al eliminar las categorías antiguas:", deleteError);
+                    return db_1.default.rollback(() => {
+                        res.status(500).json({ error: "Ocurrió un error al eliminar las categorías antiguas" });
+                    });
+                }
+                // Si no hay nuevas categorías, hacer commit y finalizar
+                if (!parsedCategories || parsedCategories.length === 0) {
+                    return db_1.default.commit((commitError) => {
+                        if (commitError) {
+                            console.error("Error al confirmar la transacción:", commitError);
+                            return db_1.default.rollback(() => {
+                                res.status(500).json({ error: "Ocurrió un error al confirmar la transacción" });
+                            });
+                        }
+                        res.status(200).json({ message: "Marca actualizada con éxito" });
+                    });
+                }
+                // Insertar las nuevas categorías
+                const insertCategoriesQuery = `
+            INSERT INTO brands_categories (id_brand, category)
+            VALUES ?
+          `;
+                // Preparar los valores a insertar (solo el nombre de las categorías, no el objeto completo)
+                const categoryValues = parsedCategories.map((category) => [
+                    id,
+                    category.name ? category.name : category // Extraer el 'name' si existe, o el valor si es un string
+                ]);
+                db_1.default.query(insertCategoriesQuery, [categoryValues], (catError) => {
+                    if (catError) {
+                        console.error("Error al insertar las nuevas categorías:", catError);
+                        return db_1.default.rollback(() => {
+                            res.status(500).json({ error: "Ocurrió un error al insertar las nuevas categorías" });
+                        });
+                    }
+                    // Confirmar la transacción si todo fue exitoso
+                    db_1.default.commit((commitError) => {
+                        if (commitError) {
+                            console.error("Error al confirmar la transacción:", commitError);
+                            return db_1.default.rollback(() => {
+                                res.status(500).json({ error: "Ocurrió un error al confirmar la transacción" });
+                            });
+                        }
+                        res.status(200).json({ message: "Marca y categorías actualizadas con éxito" });
+                    });
+                });
+            });
+        });
+    });
+}));
 exports.default = router;
