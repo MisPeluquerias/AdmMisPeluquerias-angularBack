@@ -51,6 +51,7 @@ router.get("/getAllBrands", (req, res) => __awaiter(void 0, void 0, void 0, func
         const search = req.query.search ? `%${req.query.search}%` : "%%";
         const query = `
     SELECT b.id_brand, b.name, b.imagePath, b.active, COUNT(sb.id_salon) AS totalSalones, 
+           GROUP_CONCAT(bc.id_brand_category SEPARATOR ', ') AS category_ids,
            GROUP_CONCAT(bc.category SEPARATOR ', ') AS categories
     FROM brands b
     LEFT JOIN brands_salon sb ON b.id_brand = sb.id_brand
@@ -99,7 +100,8 @@ router.get("/getAllBrands", (req, res) => __awaiter(void 0, void 0, void 0, func
                         imagePath: row.imagePath,
                         active: row.active,
                         totalSalones: row.totalSalones,
-                        categories: row.categories || '', // Devolver las categorías separadas por comas
+                        categories: row.categories || '',
+                        id_brand_category: row.category_ids // Devolver las categorías separadas por comas
                     }));
                     db_1.default.commit((commitError) => {
                         if (commitError) {
@@ -394,4 +396,118 @@ router.post("/deleteBrand", (req, res) => {
         });
     });
 });
+// Endpoint para actualizar una marca
+router.put("/updateBrand/:id_brand", upload.single("brandImage"), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id_brand } = req.params;
+    const { name, categories } = req.body; // Recibir las categorías como JSON string
+    const brandImage = req.file;
+    if (!name) {
+        return res.status(400).json({ error: "El nombre de la marca es requerido" });
+    }
+    try {
+        // Iniciar la transacción
+        db_1.default.beginTransaction((err) => __awaiter(void 0, void 0, void 0, function* () {
+            if (err) {
+                console.error("Error iniciando la transacción:", err);
+                return res.status(500).json({ error: "Error al iniciar la transacción" });
+            }
+            // Actualizar nombre y ruta de imagen
+            let updateBrandQuery = `
+        UPDATE brands 
+        SET name = ?, active = 1
+      `;
+            const params = [name];
+            if (brandImage) {
+                const serverUrl = `${req.protocol}://${req.get("host")}`;
+                const imageUrl = `${serverUrl}/uploads/brands-pictures/${brandImage.filename}`;
+                updateBrandQuery += `, imagePath = ? `;
+                params.push(imageUrl);
+            }
+            updateBrandQuery += `WHERE id_brand = ?`;
+            params.push(id_brand);
+            db_1.default.query(updateBrandQuery, params, (updateError) => {
+                if (updateError) {
+                    console.error("Error actualizando la marca:", updateError);
+                    return db_1.default.rollback(() => {
+                        res.status(500).json({ error: "Error al actualizar la marca" });
+                    });
+                }
+                // Eliminar categorías existentes
+                const deleteCategoriesQuery = `DELETE FROM brands_categories WHERE id_brand = ?`;
+                db_1.default.query(deleteCategoriesQuery, [id_brand], (deleteError) => {
+                    if (deleteError) {
+                        console.error("Error eliminando las categorías:", deleteError);
+                        return db_1.default.rollback(() => {
+                            res.status(500).json({ error: "Error al eliminar las categorías" });
+                        });
+                    }
+                    // Insertar nuevas categorías si existen
+                    if (categories) {
+                        let parsedCategories;
+                        try {
+                            parsedCategories = JSON.parse(categories); // Asegurarse de que es un array
+                            if (!Array.isArray(parsedCategories)) {
+                                throw new Error("Categories should be an array");
+                            }
+                        }
+                        catch (e) {
+                            return res.status(400).json({ error: "Formato de categorías incorrecto" });
+                        }
+                        if (parsedCategories.length > 0) {
+                            const insertCategoriesQuery = `INSERT INTO brands_categories (id_brand, category) VALUES ?`;
+                            // Extraer el nombre de cada categoría del objeto y construir los valores para la consulta
+                            const categoryValues = parsedCategories.map((category) => [id_brand, category.name]);
+                            db_1.default.query(insertCategoriesQuery, [categoryValues], (insertError) => {
+                                if (insertError) {
+                                    console.error("Error insertando categorías:", insertError);
+                                    return db_1.default.rollback(() => {
+                                        res.status(500).json({ error: "Error al insertar categorías" });
+                                    });
+                                }
+                                // Si todo fue exitoso, hacer commit de la transacción
+                                db_1.default.commit((commitError) => {
+                                    if (commitError) {
+                                        console.error("Error al confirmar la transacción:", commitError);
+                                        return db_1.default.rollback(() => {
+                                            res.status(500).json({ error: "Error al confirmar la transacción" });
+                                        });
+                                    }
+                                    res.status(200).json({ message: "Marca actualizada con éxito" });
+                                });
+                            });
+                        }
+                        else {
+                            // Si no hay categorías, hacer commit directamente
+                            db_1.default.commit((commitError) => {
+                                if (commitError) {
+                                    console.error("Error al confirmar la transacción:", commitError);
+                                    return db_1.default.rollback(() => {
+                                        res.status(500).json({ error: "Error al confirmar la transacción" });
+                                    });
+                                }
+                                res.status(200).json({ message: "Marca actualizada con éxito" });
+                            });
+                        }
+                    }
+                    else {
+                        // Si no hay categorías, hacer commit directamente
+                        db_1.default.commit((commitError) => {
+                            if (commitError) {
+                                console.error("Error al confirmar la transacción:", commitError);
+                                return db_1.default.rollback(() => {
+                                    res.status(500).json({ error: "Error al confirmar la transacción" });
+                                });
+                            }
+                            res.status(200).json({ message: "Marca actualizada con éxito" });
+                        });
+                    }
+                });
+            });
+        }));
+    }
+    catch (err) {
+        console.error("Error inesperado:", err);
+        res.status(500).json({ error: "Ocurrió un error inesperado" });
+    }
+}));
 exports.default = router;

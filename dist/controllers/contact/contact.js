@@ -102,7 +102,8 @@ const transporter = nodemailer.createTransport({
     },
 });
 router.post('/send-reply-contact', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { to, subject, message } = req.body;
+    const { id_contact, to, subject, message, replyMessage } = req.body;
+    //console.log(id_contact,replyMessage);
     // Configuración del correo a enviar
     const mailOptions = {
         from: '"mispeluquerias.com" <comunicaciones@mispeluquerias.com>', // Remitente
@@ -122,11 +123,20 @@ router.post('/send-reply-contact', (req, res) => __awaiter(void 0, void 0, void 
     try {
         // Enviar el correo
         const info = yield transporter.sendMail(mailOptions);
-        // Enviar una respuesta JSON para evitar errores en el frontend
-        res.status(200).json({ success: true, message: 'Correo enviado con éxito' });
+        //console.log('Correo enviado:', info.messageId);
+        // Inserción de la réplica en la base de datos
+        const query = 'UPDATE contact SET answer = ? WHERE id_contact = ?';
+        db_1.default.query(query, [replyMessage, id_contact], (dbError, result) => {
+            if (dbError) {
+                console.error('Error al insertar la réplica en la base de datos:', dbError);
+                return res.status(500).json({ success: false, message: 'Error al insertar la réplica en la base de datos' });
+            }
+            // Enviar una respuesta JSON al frontend
+            res.status(200).json({ success: true, message: 'Correo enviado con éxito y réplica almacenada' });
+        });
     }
     catch (error) {
-        // Manejar errores y enviar una respuesta JSON
+        // Manejar errores al enviar el correo
         console.error('Error al enviar el correo:', error);
         res.status(500).json({ success: false, message: 'Error al enviar el correo' });
     }

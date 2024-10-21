@@ -221,9 +221,9 @@ router.put('/updateSubservices/:service_type_ids', (req, res) => {
   const service_type_ids: number[] = req.params.service_type_ids.split(',').map((id: string) => parseInt(id, 10));
   const { subservices, id_service } = req.body;
 
-  console.log('Lista de IDs proporcionada por el frontend:', service_type_ids);
-  console.log('Subservicios enviados por el frontend:', subservices);
-  console.log('ID del servicio:', id_service);
+  //console.log('Lista de IDs proporcionada por el frontend:', service_type_ids);
+  //console.log('Subservicios enviados por el frontend:', subservices);
+  //console.log('ID del servicio:', id_service);
 
   if (!subservices || subservices.length === 0 || !id_service) {
     console.error('Error: No se proporcionaron subservicios o ID del servicio.');
@@ -241,15 +241,15 @@ router.put('/updateSubservices/:service_type_ids', (req, res) => {
 
     const existingResults = results as RowDataPacket[];
     const existingServiceTypeIds: number[] = existingResults.map((row: any) => row.id_service_type);
-    console.log('Subservicios existentes en la base de datos:', existingServiceTypeIds);
+    //console.log('Subservicios existentes en la base de datos:', existingServiceTypeIds);
 
     // Identificar los `id_service_type` que deben eliminarse
     const idsToDelete: number[] = existingServiceTypeIds.filter(id => !service_type_ids.includes(id));
-    console.log('IDs a eliminar identificados:', idsToDelete);
+    //console.log('IDs a eliminar identificados:', idsToDelete);
 
     if (idsToDelete.length > 0) {
       const deletePromises = idsToDelete.map((id_service_type: number) => {
-        console.log(`Intentando eliminar subservicio con id_service_type: ${id_service_type}`);
+        //(`Intentando eliminar subservicio con id_service_type: ${id_service_type}`);
         const deleteQuery = `DELETE FROM service_type WHERE id_service_type = ?`;
         return new Promise((resolve, reject) => {
           connection.query(deleteQuery, [id_service_type], (error, results: OkPacket) => {
@@ -257,7 +257,7 @@ router.put('/updateSubservices/:service_type_ids', (req, res) => {
               console.error('Error eliminando subservicio:', error);
               reject(error);
             } else if (results.affectedRows > 0) {
-              console.log(`Subservicio con id_service_type: ${id_service_type} eliminado correctamente.`);
+              //console.log(`Subservicio con id_service_type: ${id_service_type} eliminado correctamente.`);
               resolve(null);
             } else {
               console.log(`No se encontró subservicio con id_service_type: ${id_service_type} para eliminar.`);
@@ -278,7 +278,7 @@ router.put('/updateSubservices/:service_type_ids', (req, res) => {
         });
     } else {
       // Si no hay nada que eliminar, continuar directamente con la inserción/actualización
-      console.log('No se encontraron subservicios para eliminar, pasando a la actualización/inserción.');
+      //console.log('No se encontraron subservicios para eliminar, pasando a la actualización/inserción.');
       handleUpdateAndInsert();
     }
 
