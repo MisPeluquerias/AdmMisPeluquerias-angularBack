@@ -27,7 +27,7 @@ router.get('/getAllMessageContact', (req, res) => __awaiter(void 0, void 0, void
     let query = `
     SELECT SQL_CALC_FOUND_ROWS * 
     FROM contact 
-    WHERE (name LIKE ? OR email LIKE ? OR phone LIKE ? OR text LIKE ?)
+    WHERE (name LIKE ? OR email LIKE ? OR phone LIKE ? OR text LIKE ?) ORDER BY email 
   `;
     const queryParams = [search, search, search, search];
     // Aplica los filtros si están presentes

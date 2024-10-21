@@ -76,7 +76,7 @@ router.get('/getAllMessageContactProffesional', (req, res) => __awaiter(void 0, 
     LEFT JOIN 
         province p ON cp.id_province = p.id_province
     WHERE 
-        (cp.name LIKE ? OR cp.email LIKE ? OR cp.phone LIKE ? OR cp.text LIKE ?)
+        (cp.name LIKE ? OR cp.email LIKE ? OR cp.phone LIKE ? OR cp.text LIKE ?) ORDER BY email
   `;
     const queryParams = [search, search, search, search];
     // Aplica los filtros si están presentes

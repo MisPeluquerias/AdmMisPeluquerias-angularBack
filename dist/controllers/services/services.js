@@ -26,7 +26,8 @@ router.get('/getAllServices', (req, res) => __awaiter(void 0, void 0, void 0, fu
     SELECT SQL_CALC_FOUND_ROWS 
       s.id_service, 
       s.name AS service_name, 
-      GROUP_CONCAT(sn.name ORDER BY sn.name SEPARATOR ', ') AS subservices
+      GROUP_CONCAT(sn.name ORDER BY sn.name SEPARATOR ', ') AS subservices,
+      GROUP_CONCAT(sn.id_service_type ORDER BY sn.id_service_type SEPARATOR ', ') AS service_type_ids
     FROM service s
     INNER JOIN service_type sn ON s.id_service = sn.id_service
     WHERE s.name LIKE ? OR sn.name LIKE ?
@@ -51,67 +52,70 @@ router.get('/getAllServices', (req, res) => __awaiter(void 0, void 0, void 0, fu
         });
     });
 }));
-router.post('/addService', (req, res) => {
+router.post('/addService', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { name, subservices } = req.body;
-    // Verificar que name y subservices existan
     if (!name || !Array.isArray(subservices) || subservices.length === 0) {
         return res.status(400).json({ error: 'Nombre del servicio y subservicios son necesarios' });
     }
-    // Si subservices es un array, asegúrate de eliminar espacios en blanco de cada subservicio
-    const subservicesArray = subservices.map((subservice) => subservice.trim());
+    // Usamos una transacción para asegurar que se añadan tanto el servicio como los subservicios
     const queryService = 'INSERT INTO service (name, id_salon) VALUES (?, 0)';
     const querySubservice = 'INSERT INTO service_type (id_service, name) VALUES (?, ?)';
-    // Iniciar la transacción
-    db_1.default.beginTransaction((transactionError) => {
-        if (transactionError) {
-            console.error('Error al iniciar la transacción:', transactionError);
-            return res.status(500).json({ error: 'Error al iniciar la transacción' });
-        }
-        // Insertar el servicio
-        db_1.default.query(queryService, [name], (serviceError, result) => {
-            if (serviceError) {
-                db_1.default.rollback(() => {
-                    console.error('Error al insertar el servicio:', serviceError);
-                    return res.status(500).json({ error: 'Error al insertar el servicio' });
-                });
-                return;
+    try {
+        db_1.default.beginTransaction((transactionError) => __awaiter(void 0, void 0, void 0, function* () {
+            if (transactionError) {
+                console.error('Error starting transaction:', transactionError);
+                return res.status(500).json({ error: 'Transaction failed' });
             }
-            const serviceId = result.insertId;
-            // Insertar subservicios asociados
-            const subservicePromises = subservicesArray.map((subservice) => {
-                return new Promise((resolve, reject) => {
-                    db_1.default.query(querySubservice, [serviceId, subservice], (subError) => {
-                        if (subError) {
-                            return reject(subError);
+            // Insertar el servicio
+            db_1.default.query(queryService, [name], (error, result) => {
+                if (error) {
+                    db_1.default.rollback(() => {
+                        console.error('Error inserting service:', error);
+                        res.status(500).json({ error: 'Error inserting service' });
+                    });
+                    return;
+                }
+                const serviceId = result.insertId; // Asegúrate de obtener el serviceId correctamente
+                // Insertar los subservicios asociados
+                const subservicePromises = subservices.map(subservice => {
+                    return new Promise((resolve, reject) => {
+                        db_1.default.query(querySubservice, [serviceId, subservice], (subError, subResult) => {
+                            if (subError) {
+                                return reject(subError);
+                            }
+                            resolve(subResult);
+                        });
+                    });
+                });
+                // Ejecutar todas las promesas de inserción de subservicios
+                Promise.all(subservicePromises)
+                    .then(() => {
+                    db_1.default.commit(commitError => {
+                        if (commitError) {
+                            db_1.default.rollback(() => {
+                                console.error('Error committing transaction:', commitError);
+                                res.status(500).json({ error: 'Error committing transaction' });
+                            });
                         }
-                        resolve();
+                        else {
+                            res.status(201).json({ message: 'Servicio y subservicios creados con éxito' });
+                        }
+                    });
+                })
+                    .catch(subserviceError => {
+                    db_1.default.rollback(() => {
+                        console.error('Error inserting subservices:', subserviceError);
+                        res.status(500).json({ error: 'Error inserting subservices' });
                     });
                 });
             });
-            // Ejecutar todas las inserciones de subservicios
-            Promise.all(subservicePromises)
-                .then(() => {
-                db_1.default.commit((commitError) => {
-                    if (commitError) {
-                        db_1.default.rollback(() => {
-                            console.error('Error al confirmar la transacción:', commitError);
-                            return res.status(500).json({ error: 'Error al confirmar la transacción' });
-                        });
-                    }
-                    else {
-                        return res.status(201).json({ message: 'Servicio y subservicios creados con éxito' });
-                    }
-                });
-            })
-                .catch((subserviceError) => {
-                db_1.default.rollback(() => {
-                    console.error('Error al insertar los subservicios:', subserviceError);
-                    return res.status(500).json({ error: 'Error al insertar los subservicios' });
-                });
-            });
-        });
-    });
-});
+        }));
+    }
+    catch (error) {
+        console.error('Error creating service and subservices:', error);
+        res.status(500).json({ error: 'Error creating service and subservices' });
+    }
+}));
 router.delete("/deleteServiceWithSubservices/:id_service", (req, res) => {
     const { id_service } = req.params;
     db_1.default.beginTransaction((err) => {
@@ -189,29 +193,162 @@ router.put('/updateService/:id_service', (req, res) => {
         res.status(200).json({ success: true, message: 'Servicio actualizado correctamente' });
     });
 });
-router.put('/updateSubservices/:id_service', (req, res) => {
-    const { id_service } = req.params;
-    const { subservices } = req.body;
-    if (!subservices || subservices.length === 0) {
-        return res.status(400).json({ error: 'Debe proporcionar al menos un subservicio.' });
+router.put('/updateSubservices/:service_type_ids', (req, res) => {
+    const service_type_ids = req.params.service_type_ids.split(',').map((id) => parseInt(id, 10));
+    const { subservices, id_service } = req.body;
+    console.log('Lista de IDs proporcionada por el frontend:', service_type_ids);
+    console.log('Subservicios enviados por el frontend:', subservices);
+    console.log('ID del servicio:', id_service);
+    if (!subservices || subservices.length === 0 || !id_service) {
+        console.error('Error: No se proporcionaron subservicios o ID del servicio.');
+        return res.status(400).json({ error: 'Debe proporcionar al menos un subservicio y el ID del servicio.' });
     }
-    // Eliminar todos los subservicios actuales para este servicio
-    const deleteQuery = 'DELETE FROM service_type WHERE id_service = ?';
-    db_1.default.query(deleteQuery, [id_service], (deleteError) => {
-        if (deleteError) {
-            console.error('Error eliminando subservicios:', deleteError);
-            return res.status(500).json({ error: 'Error eliminando subservicios actuales.' });
+    // Obtener todos los `id_service_type` existentes para este `id_service`
+    const existingQuery = 'SELECT id_service_type FROM service_type WHERE id_service = ?';
+    db_1.default.query(existingQuery, [id_service], (err, results) => {
+        if (err) {
+            console.error('Error obteniendo subservicios existentes:', err);
+            return res.status(500).json({ error: 'Error al obtener subservicios existentes.' });
         }
-        // Insertar los nuevos subservicios
-        const insertQuery = 'INSERT INTO service_type (id_service, name) VALUES ?';
-        const subservicesData = subservices.map((subservice) => [id_service, subservice]);
-        db_1.default.query(insertQuery, [subservicesData], (insertError) => {
-            if (insertError) {
-                console.error('Error insertando nuevos subservicios:', insertError);
-                return res.status(500).json({ error: 'Error insertando nuevos subservicios.' });
+        const existingResults = results;
+        const existingServiceTypeIds = existingResults.map((row) => row.id_service_type);
+        console.log('Subservicios existentes en la base de datos:', existingServiceTypeIds);
+        // Identificar los `id_service_type` que deben eliminarse
+        const idsToDelete = existingServiceTypeIds.filter(id => !service_type_ids.includes(id));
+        console.log('IDs a eliminar identificados:', idsToDelete);
+        if (idsToDelete.length > 0) {
+            const deletePromises = idsToDelete.map((id_service_type) => {
+                console.log(`Intentando eliminar subservicio con id_service_type: ${id_service_type}`);
+                const deleteQuery = `DELETE FROM service_type WHERE id_service_type = ?`;
+                return new Promise((resolve, reject) => {
+                    db_1.default.query(deleteQuery, [id_service_type], (error, results) => {
+                        if (error) {
+                            console.error('Error eliminando subservicio:', error);
+                            reject(error);
+                        }
+                        else if (results.affectedRows > 0) {
+                            console.log(`Subservicio con id_service_type: ${id_service_type} eliminado correctamente.`);
+                            resolve(null);
+                        }
+                        else {
+                            console.log(`No se encontró subservicio con id_service_type: ${id_service_type} para eliminar.`);
+                            resolve(null);
+                        }
+                    });
+                });
+            });
+            // Ejecutar promesas de eliminación y continuar con la inserción/actualización
+            Promise.all(deletePromises)
+                .then(() => {
+                handleUpdateAndInsert();
+            })
+                .catch((error) => {
+                console.error('Error eliminando los subservicios:', error);
+                res.status(500).json({ error: 'Error durante la eliminación de subservicios.' });
+            });
+        }
+        else {
+            // Si no hay nada que eliminar, continuar directamente con la inserción/actualización
+            console.log('No se encontraron subservicios para eliminar, pasando a la actualización/inserción.');
+            handleUpdateAndInsert();
+        }
+        function handleUpdateAndInsert() {
+            // Validar que el array `subservices[]` y `service_type_ids[]` tengan la misma longitud
+            if (subservices.length < service_type_ids.length) {
+                // Si hay menos subservicios que ids, se eliminan aquellos cuyo nombre es `null` o `undefined`
+                const missingSubservices = service_type_ids.slice(subservices.length);
+                const deleteMissingSubservicesPromises = missingSubservices.map((id_service_type) => {
+                    //console.log(`Eliminando subservicio con id_service_type ${id_service_type} porque no tiene nombre asociado.`);
+                    const deleteQuery = `DELETE FROM service_type WHERE id_service_type = ?`;
+                    return new Promise((resolve, reject) => {
+                        db_1.default.query(deleteQuery, [id_service_type], (error, results) => {
+                            if (error) {
+                                console.error('Error eliminando subservicio con id_service_type:', error);
+                                reject(error);
+                            }
+                            else {
+                                //console.log(`Subservicio con id_service_type ${id_service_type} eliminado correctamente.`);
+                                resolve(null);
+                            }
+                        });
+                    });
+                });
+                // Ejecutar promesas de eliminación para los subservicios faltantes
+                Promise.all(deleteMissingSubservicesPromises)
+                    .then(() => {
+                    //console.log('Eliminación de subservicios faltantes completada.');
+                    proceedWithUpdateAndInsert();
+                })
+                    .catch((error) => {
+                    console.error('Error eliminando los subservicios faltantes:', error);
+                    res.status(500).json({ error: 'Error durante la eliminación de subservicios faltantes.' });
+                });
             }
-            res.status(200).json({ success: true, message: 'Subservicios actualizados con éxito.' });
-        });
+            else {
+                proceedWithUpdateAndInsert();
+            }
+        }
+        function proceedWithUpdateAndInsert() {
+            // Actualizar los subservicios existentes
+            const updatePromises = service_type_ids.slice(0, subservices.length).map((id_service_type, index) => {
+                const subserviceName = subservices[index];
+                if (existingServiceTypeIds.includes(id_service_type)) {
+                    if (!subserviceName) {
+                        console.log(`No se puede actualizar subservicio con id_service_type: ${id_service_type} porque el nombre está indefinido.`);
+                        return Promise.resolve(null);
+                    }
+                    console.log(`Actualizando subservicio con id_service_type: ${id_service_type}, nombre: ${subserviceName}`);
+                    const updateQuery = `
+            UPDATE service_type 
+            SET name = ? 
+            WHERE id_service_type = ?
+          `;
+                    return new Promise((resolve, reject) => {
+                        db_1.default.query(updateQuery, [subserviceName, id_service_type], (error) => {
+                            if (error) {
+                                console.error('Error actualizando subservicio:', error);
+                                reject(error);
+                            }
+                            else {
+                                resolve(null);
+                            }
+                        });
+                    });
+                }
+                else {
+                    return Promise.resolve(null); // No hacer nada si no se encuentra
+                }
+            });
+            // Insertar nuevos subservicios
+            const newSubservices = subservices.slice(existingServiceTypeIds.length); // Solo los nuevos subservicios
+            const insertPromises = newSubservices.map((subserviceName) => {
+                //console.log(`Insertando nuevo subservicio: nombre: ${subserviceName}`);
+                const insertQuery = `
+          INSERT INTO service_type (id_service, name) VALUES (?, ?)
+        `;
+                return new Promise((resolve, reject) => {
+                    db_1.default.query(insertQuery, [id_service, subserviceName], (error, results) => {
+                        if (error) {
+                            console.error('Error insertando nuevo subservicio:', error);
+                            reject(error);
+                        }
+                        else {
+                            resolve(null);
+                        }
+                    });
+                });
+            });
+            // Ejecutar todas las promesas: actualización e inserción
+            Promise.all([...updatePromises, ...insertPromises])
+                .then(() => {
+                //console.log('Actualización, inserción y eliminación de subservicios completada.');
+                res.status(200).json({ success: true, message: 'Subservicios actualizados, insertados y eliminados con éxito.' });
+            })
+                .catch((error) => {
+                console.error('Error durante la actualización/inserción:', error);
+                res.status(500).json({ error: 'Error al procesar los subservicios.' });
+            });
+        }
     });
 });
 exports.default = router;
