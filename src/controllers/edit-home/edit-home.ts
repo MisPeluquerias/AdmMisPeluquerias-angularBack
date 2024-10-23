@@ -612,7 +612,9 @@ router.get("/getServices", async (req, res) => {
   });
 });
 
-router.get("/getAllBrands", async (req, res) => {
+
+
+router.get("/getAllCategoriesBrands", async (req, res) => {
   connection.beginTransaction((err) => {
     if (err) {
       return res.status(500).json({
@@ -623,7 +625,7 @@ router.get("/getAllBrands", async (req, res) => {
     }
 
     // Usar DISTINCT para seleccionar solo servicios únicos por nombre
-    const query = "SELECT * FROM brands";
+    const query = "SELECT DISTINCT category FROM brands_categories";
 
     connection.query(query, (err, results) => {
       if (err) {
@@ -651,6 +653,8 @@ router.get("/getAllBrands", async (req, res) => {
     });
   });
 });
+
+
 
 router.get("/getBrandsBySalon", (req, res) => {
   const id_salon = req.query.id_salon;
@@ -1956,6 +1960,47 @@ router.delete("/deleteBrandById", async (req, res) => {
     res.status(500).json({ error: "Error al eliminar la marca." });
   }
 });
+
+
+
+
+router.get("/getBrandsByCategory", (req, res) => {
+  const { category, term } = req.query; // Tomamos también el término de búsqueda
+
+  console.log("Categoría recibida:", category, "Término de búsqueda:", term);
+
+  if (!category) {
+    return res.status(400).json({ error: "El nombre de la categoría es requerido" });
+  }
+
+  // Construimos la consulta SQL para filtrar por categoría y, opcionalmente, por el término de búsqueda
+  let query = `
+    SELECT brands.id_brand, brands.name
+    FROM brands_categories
+    JOIN brands ON brands_categories.id_brand = brands.id_brand
+    WHERE brands_categories.category = ?
+  `;
+
+  const queryParams = [category];
+
+  // Si también hay un término de búsqueda, lo agregamos a la consulta
+  if (term) {
+    query += " AND brands.name LIKE ?";
+    queryParams.push(`%${term}%`);
+  }
+
+  connection.query(query, queryParams, (error, results) => {
+    if (error) {
+      console.error("Error al obtener las marcas:", error);
+      return res.status(500).json({ error: "Error al obtener las marcas." });
+    }
+
+    res.json(results);
+    console.log("Resultados:", results);
+  });
+});
+
+
 
 
 export default router;

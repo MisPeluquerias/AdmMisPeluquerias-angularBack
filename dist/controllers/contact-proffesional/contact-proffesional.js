@@ -66,6 +66,36 @@ router.post('/send-reply-contactProffesional', (req, res) => __awaiter(void 0, v
         res.status(500).json({ success: false, message: 'Error al enviar el correo' });
     }
 }));
+1;
+router.post('/send-new-email-contactProffesional', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { to, subject, message } = req.body;
+    // Configuración del correo a enviar
+    const mailOptions = {
+        from: '"mispeluquerias.com" <comunicaciones@mispeluquerias.com>', // Remitente
+        to, // Correo del destinatario
+        subject, // Asunto del correo
+        text: message, // Mensaje en texto plano
+        html: `
+      <p>${message}</p>
+      <p>Por favor, no respondas directamente a este correo.</p>
+      <p>Para responder, visita nuestra plataforma en 
+         <a href="https://www.mispeluquerias.com/profesionales" target="_blank" style="color: #007bff; text-decoration: underline;">
+          www.mispeluquerias.com/profesionales
+        </a>.
+      </p>
+    `,
+    };
+    try {
+        // Enviar el correo
+        const info = yield transporter.sendMail(mailOptions);
+        res.status(200).json({ success: true, message: 'Correo enviado con éxito y réplica almacenada' });
+    }
+    catch (error) {
+        // Manejar errores al enviar el correo
+        console.error('Error al enviar el correo:', error);
+        res.status(500).json({ success: false, message: 'Error al enviar el correo' });
+    }
+}));
 router.get('/getAllMessageContactProffesional', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const page = parseInt(req.query.page || '1', 10);
     const pageSize = parseInt(req.query.pageSize || '10', 10);

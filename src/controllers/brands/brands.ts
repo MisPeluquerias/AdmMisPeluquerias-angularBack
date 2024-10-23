@@ -139,6 +139,10 @@ router.get("/getAllBrands", async (req, res) => {
   }
 });
 
+
+
+
+
 router.get("/searchCategoryInLive", async (req, res) => {
   try {
     const { category } = req.query;
@@ -491,6 +495,8 @@ router.put("/updateBrand/:id_brand", upload.single("brandImage"), async (req, re
   const { name, categories } = req.body; // Recibir las categorías como JSON string
   const brandImage = req.file;
 
+  //console.log("Categorias recibidas:", categories);
+
   if (!name) {
     return res.status(400).json({ error: "El nombre de la marca es requerido" });
   }
@@ -503,68 +509,110 @@ router.put("/updateBrand/:id_brand", upload.single("brandImage"), async (req, re
         return res.status(500).json({ error: "Error al iniciar la transacción" });
       }
 
-      // Actualizar nombre y ruta de imagen
-      let updateBrandQuery = `
-        UPDATE brands 
-        SET name = ?, active = 1
-      `;
-      const params = [name];
-
-      if (brandImage) {
-        const serverUrl = `${req.protocol}://${req.get("host")}`;
-        const imageUrl = `${serverUrl}/uploads/brands-pictures/${brandImage.filename}`;
-        updateBrandQuery += `, imagePath = ? `;
-        params.push(imageUrl);
-      }
-
-      updateBrandQuery += `WHERE id_brand = ?`;
-      params.push(id_brand);
-
-      connection.query(updateBrandQuery, params, (updateError) => {
-        if (updateError) {
-          console.error("Error actualizando la marca:", updateError);
+      // Obtener la imagen actual antes de actualizar
+      const getBrandQuery = `SELECT imagePath FROM brands WHERE id_brand = ?`;
+      connection.query(getBrandQuery, [id_brand], (getError, results:any) => {
+        if (getError) {
+          console.error("Error obteniendo la imagen actual:", getError);
           return connection.rollback(() => {
-            res.status(500).json({ error: "Error al actualizar la marca" });
+            res.status(500).json({ error: "Error al obtener la imagen actual" });
           });
         }
 
-        // Eliminar categorías existentes
-        const deleteCategoriesQuery = `DELETE FROM brands_categories WHERE id_brand = ?`;
-        connection.query(deleteCategoriesQuery, [id_brand], (deleteError) => {
-          if (deleteError) {
-            console.error("Error eliminando las categorías:", deleteError);
+        const currentImagePath = results[0]?.imagePath;
+
+        // Si hay una nueva imagen, eliminar la anterior del servidor
+        if (brandImage && currentImagePath) {
+          const projectRoot = path.resolve(__dirname, "../../"); // Subimos dos niveles desde 'dist/controllers'
+          const imagePathToDelete = path.join(projectRoot, "uploads/brands-pictures", path.basename(currentImagePath));
+
+          // Verificar si el archivo existe antes de eliminarlo
+          if (fs.existsSync(imagePathToDelete)) {
+            fs.unlink(imagePathToDelete, (unlinkError) => {
+              if (unlinkError) {
+                console.warn("Advertencia: Error eliminando la imagen anterior:", unlinkError);
+              }
+            });
+          } else {
+            console.warn(`Advertencia: La imagen no existe en la ruta: ${imagePathToDelete}`);
+          }
+        }
+
+        // Actualizar nombre y ruta de imagen
+        let updateBrandQuery = `
+          UPDATE brands 
+          SET name = ?, active = 1
+        `;
+        const params = [name];
+
+        if (brandImage) {
+          const serverUrl = `${req.protocol}://${req.get("host")}`;
+          const imageUrl = `${serverUrl}/uploads/brands-pictures/${brandImage.filename}`;
+          updateBrandQuery += `, imagePath = ? `;
+          params.push(imageUrl);
+        }
+
+        updateBrandQuery += `WHERE id_brand = ?`;
+        params.push(id_brand);
+
+        connection.query(updateBrandQuery, params, (updateError) => {
+          if (updateError) {
+            console.error("Error actualizando la marca:", updateError);
             return connection.rollback(() => {
-              res.status(500).json({ error: "Error al eliminar las categorías" });
+              res.status(500).json({ error: "Error al actualizar la marca" });
             });
           }
 
-          // Insertar nuevas categorías si existen
-          if (categories) {
-            let parsedCategories;
-            try {
-              parsedCategories = JSON.parse(categories); // Asegurarse de que es un array
-              if (!Array.isArray(parsedCategories)) {
-                throw new Error("Categories should be an array");
-              }
-            } catch (e) {
-              return res.status(400).json({ error: "Formato de categorías incorrecto" });
+          // Eliminar categorías existentes
+          const deleteCategoriesQuery = `DELETE FROM brands_categories WHERE id_brand = ?`;
+          connection.query(deleteCategoriesQuery, [id_brand], (deleteError) => {
+            if (deleteError) {
+              console.error("Error eliminando las categorías:", deleteError);
+              return connection.rollback(() => {
+                res.status(500).json({ error: "Error al eliminar las categorías" });
+              });
             }
 
-            if (parsedCategories.length > 0) {
-              const insertCategoriesQuery = `INSERT INTO brands_categories (id_brand, category) VALUES ?`;
-
-              // Extraer el nombre de cada categoría del objeto y construir los valores para la consulta
-              const categoryValues = parsedCategories.map((category: any) => [id_brand, category.name]);
-
-              connection.query(insertCategoriesQuery, [categoryValues], (insertError) => {
-                if (insertError) {
-                  console.error("Error insertando categorías:", insertError);
-                  return connection.rollback(() => {
-                    res.status(500).json({ error: "Error al insertar categorías" });
-                  });
+            // Insertar nuevas categorías si existen
+            if (categories) {
+              let parsedCategories;
+              try {
+                parsedCategories = JSON.parse(categories); // Asegurarse de que es un array
+                if (!Array.isArray(parsedCategories)) {
+                  throw new Error("Categories should be an array");
                 }
+              } catch (e) {
+                return res.status(400).json({ error: "Formato de categorías incorrecto" });
+              }
 
-                // Si todo fue exitoso, hacer commit de la transacción
+              if (parsedCategories.length > 0) {
+                const insertCategoriesQuery = `INSERT INTO brands_categories (id_brand, category) VALUES ?`;
+
+                // Extraer el nombre de cada categoría del objeto y construir los valores para la consulta
+                const categoryValues = parsedCategories.map((category) => [id_brand, category.name]);
+
+                connection.query(insertCategoriesQuery, [categoryValues], (insertError) => {
+                  if (insertError) {
+                    console.error("Error insertando categorías:", insertError);
+                    return connection.rollback(() => {
+                      res.status(500).json({ error: "Error al insertar categorías" });
+                    });
+                  }
+
+                  // Si todo fue exitoso, hacer commit de la transacción
+                  connection.commit((commitError) => {
+                    if (commitError) {
+                      console.error("Error al confirmar la transacción:", commitError);
+                      return connection.rollback(() => {
+                        res.status(500).json({ error: "Error al confirmar la transacción" });
+                      });
+                    }
+
+                    res.status(200).json({ message: "Marca actualizada con éxito" });
+                  });
+                });
+              } else {
+                // Si no hay categorías, hacer commit directamente
                 connection.commit((commitError) => {
                   if (commitError) {
                     console.error("Error al confirmar la transacción:", commitError);
@@ -575,7 +623,7 @@ router.put("/updateBrand/:id_brand", upload.single("brandImage"), async (req, re
 
                   res.status(200).json({ message: "Marca actualizada con éxito" });
                 });
-              });
+              }
             } else {
               // Si no hay categorías, hacer commit directamente
               connection.commit((commitError) => {
@@ -589,19 +637,7 @@ router.put("/updateBrand/:id_brand", upload.single("brandImage"), async (req, re
                 res.status(200).json({ message: "Marca actualizada con éxito" });
               });
             }
-          } else {
-            // Si no hay categorías, hacer commit directamente
-            connection.commit((commitError) => {
-              if (commitError) {
-                console.error("Error al confirmar la transacción:", commitError);
-                return connection.rollback(() => {
-                  res.status(500).json({ error: "Error al confirmar la transacción" });
-                });
-              }
-
-              res.status(200).json({ message: "Marca actualizada con éxito" });
-            });
-          }
+          });
         });
       });
     });
@@ -610,7 +646,6 @@ router.put("/updateBrand/:id_brand", upload.single("brandImage"), async (req, re
     res.status(500).json({ error: "Ocurrió un error inesperado" });
   }
 });
-
 
 
 
