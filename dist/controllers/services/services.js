@@ -26,10 +26,12 @@ router.get('/getAllServices', (req, res) => __awaiter(void 0, void 0, void 0, fu
     SELECT SQL_CALC_FOUND_ROWS 
       s.id_service, 
       s.name AS service_name, 
-      GROUP_CONCAT(sn.name ORDER BY sn.name SEPARATOR ', ') AS subservices,
-      GROUP_CONCAT(sn.id_service_type ORDER BY sn.id_service_type SEPARATOR ', ') AS service_type_ids
+      GROUP_CONCAT(DISTINCT sn.name ORDER BY sn.name SEPARATOR ', ') AS subservices,
+      GROUP_CONCAT(DISTINCT sn.id_service_type ORDER BY sn.id_service_type SEPARATOR ', ') AS service_type_ids,
+      GROUP_CONCAT(DISTINCT sc.category ORDER BY sc.category SEPARATOR ', ') AS categories
     FROM service s
-    INNER JOIN service_type sn ON s.id_service = sn.id_service
+    LEFT JOIN service_type sn ON s.id_service = sn.id_service
+    LEFT JOIN service_categories sc ON s.id_service = sc.id_service
     WHERE s.name LIKE ? OR sn.name LIKE ?
     GROUP BY s.id_service
     LIMIT ?, ?;
@@ -53,31 +55,33 @@ router.get('/getAllServices', (req, res) => __awaiter(void 0, void 0, void 0, fu
     });
 }));
 router.post('/addService', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { name, subservices } = req.body;
+    const { name, subservices, categories } = req.body;
+    console.log('Categorias recibidas:', categories);
+    console.log('Categorías recibidas:', categories); // Depuración para ver qué datos llegan
     if (!name || !Array.isArray(subservices) || subservices.length === 0) {
         return res.status(400).json({ error: 'Nombre del servicio y subservicios son necesarios' });
     }
-    // Usamos una transacción para asegurar que se añadan tanto el servicio como los subservicios
     const queryService = 'INSERT INTO service (name, id_salon) VALUES (?, 0)';
     const querySubservice = 'INSERT INTO service_type (id_service, name) VALUES (?, ?)';
+    const queryCategory = 'INSERT INTO service_categories (id_service, category) VALUES (?, ?)';
     try {
-        db_1.default.beginTransaction((transactionError) => __awaiter(void 0, void 0, void 0, function* () {
+        db_1.default.beginTransaction((transactionError) => {
             if (transactionError) {
                 console.error('Error starting transaction:', transactionError);
                 return res.status(500).json({ error: 'Transaction failed' });
             }
-            // Insertar el servicio
+            // Insertar el servicio y obtener el `insertId`
             db_1.default.query(queryService, [name], (error, result) => {
                 if (error) {
                     db_1.default.rollback(() => {
                         console.error('Error inserting service:', error);
-                        res.status(500).json({ error: 'Error inserting service' });
+                        return res.status(500).json({ error: 'Error inserting service' });
                     });
                     return;
                 }
-                const serviceId = result.insertId; // Asegúrate de obtener el serviceId correctamente
-                // Insertar los subservicios asociados
-                const subservicePromises = subservices.map(subservice => {
+                const serviceId = result.insertId;
+                // Insertar los subservicios
+                const subservicePromises = subservices.map((subservice) => {
                     return new Promise((resolve, reject) => {
                         db_1.default.query(querySubservice, [serviceId, subservice], (subError, subResult) => {
                             if (subError) {
@@ -87,10 +91,24 @@ router.post('/addService', (req, res) => __awaiter(void 0, void 0, void 0, funct
                         });
                     });
                 });
-                // Ejecutar todas las promesas de inserción de subservicios
-                Promise.all(subservicePromises)
+                // Insertar las categorías asociadas
+                const categoryPromises = categories.map((category) => {
+                    console.log('Insertando categoría:', category.name); // Ahora imprimimos solo el nombre de la categoría
+                    return new Promise((resolve, reject) => {
+                        // Insertamos el valor de `category.name` en lugar del objeto completo
+                        db_1.default.query(queryCategory, [serviceId, category.name], (catError, catResult) => {
+                            if (catError) {
+                                return reject(catError);
+                            }
+                            resolve(catResult);
+                            console.log('Insertando categoría:', category.name); // Ahora se verá solo el nombre
+                        });
+                    });
+                });
+                // Ejecutar todas las promesas
+                Promise.all([...subservicePromises, ...categoryPromises])
                     .then(() => {
-                    db_1.default.commit(commitError => {
+                    db_1.default.commit((commitError) => {
                         if (commitError) {
                             db_1.default.rollback(() => {
                                 console.error('Error committing transaction:', commitError);
@@ -98,22 +116,62 @@ router.post('/addService', (req, res) => __awaiter(void 0, void 0, void 0, funct
                             });
                         }
                         else {
-                            res.status(201).json({ message: 'Servicio y subservicios creados con éxito' });
+                            res.status(201).json({ message: 'Servicio, subservicios y categorías creados con éxito' });
                         }
                     });
                 })
-                    .catch(subserviceError => {
+                    .catch((insertError) => {
                     db_1.default.rollback(() => {
-                        console.error('Error inserting subservices:', subserviceError);
-                        res.status(500).json({ error: 'Error inserting subservices' });
+                        console.error('Error inserting subservices or categories:', insertError);
+                        res.status(500).json({ error: 'Error inserting subservices or categories' });
                     });
                 });
             });
-        }));
+        });
     }
     catch (error) {
-        console.error('Error creating service and subservices:', error);
-        res.status(500).json({ error: 'Error creating service and subservices' });
+        console.error('Error creando servicio, subservicios y categorías:', error);
+        res.status(500).json({ error: 'Error creando servicio, subservicios y categorías' });
+    }
+}));
+router.get("/searchCategoryInLive", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { category } = req.query;
+        if (!category) {
+            return res
+                .status(400)
+                .json({ error: "El parámetro 'category' es requerido." });
+        }
+        // Iniciar la transacción
+        yield new Promise((resolve, reject) => {
+            db_1.default.beginTransaction((err) => {
+                if (err)
+                    return reject(err);
+                resolve(undefined);
+            });
+        });
+        const query = "SELECT DISTINCT categories FROM categories WHERE categories LIKE ?";
+        db_1.default.query(query, [`%${category}%`], (error, results) => {
+            if (error) {
+                console.error("Error al buscar la categoria:", error);
+                return db_1.default.rollback(() => {
+                    res.status(500).json({ error: "Error al buscar categoria." });
+                });
+            }
+            db_1.default.commit((err) => {
+                if (err) {
+                    console.error("Error al hacer commit:", err);
+                    return db_1.default.rollback(() => {
+                        res.status(500).json({ error: "Error al buscar categoria." });
+                    });
+                }
+                res.json(results);
+            });
+        });
+    }
+    catch (err) {
+        console.error("Error al buscar categoria:", err);
+        res.status(500).json({ error: "Error al buscar la categoria." });
     }
 }));
 router.delete("/deleteServiceWithSubservices/:id_service", (req, res) => {
@@ -127,47 +185,61 @@ router.delete("/deleteServiceWithSubservices/:id_service", (req, res) => {
                 error: err,
             });
         }
-        // Primero, elimina los subservicios asociados al servicio
-        const deleteSubservicesQuery = "DELETE FROM service_type WHERE id_service = ?";
-        db_1.default.query(deleteSubservicesQuery, [id_service], (err) => {
+        // Primero, elimina las categorías asociadas al servicio
+        const deleteCategoriesQuery = "DELETE FROM service_categories WHERE id_service = ?";
+        db_1.default.query(deleteCategoriesQuery, [id_service], (err) => {
             if (err) {
-                console.error("Error deleting subservices:", err);
+                console.error("Error deleting categories:", err);
                 return db_1.default.rollback(() => {
                     res.status(500).json({
                         success: false,
-                        message: "Error deleting subservices",
+                        message: "Error deleting categories",
                         error: err,
                     });
                 });
             }
-            // Luego, elimina el servicio principal
-            const deleteServiceQuery = "DELETE FROM service WHERE id_service = ?";
-            db_1.default.query(deleteServiceQuery, [id_service], (err) => {
+            // Luego, elimina los subservicios asociados al servicio
+            const deleteSubservicesQuery = "DELETE FROM service_type WHERE id_service = ?";
+            db_1.default.query(deleteSubservicesQuery, [id_service], (err) => {
                 if (err) {
-                    console.error("Error deleting service:", err);
+                    console.error("Error deleting subservices:", err);
                     return db_1.default.rollback(() => {
                         res.status(500).json({
                             success: false,
-                            message: "Error deleting service",
+                            message: "Error deleting subservices",
                             error: err,
                         });
                     });
                 }
-                // Si todo va bien, confirma la transacción
-                db_1.default.commit((err) => {
+                // Luego, elimina el servicio principal
+                const deleteServiceQuery = "DELETE FROM service WHERE id_service = ?";
+                db_1.default.query(deleteServiceQuery, [id_service], (err) => {
                     if (err) {
-                        console.error("Error committing transaction:", err);
+                        console.error("Error deleting service:", err);
                         return db_1.default.rollback(() => {
                             res.status(500).json({
                                 success: false,
-                                message: "Error committing transaction",
+                                message: "Error deleting service",
                                 error: err,
                             });
                         });
                     }
-                    res.json({
-                        success: true,
-                        message: "Service and subservices deleted successfully",
+                    // Si todo va bien, confirma la transacción
+                    db_1.default.commit((err) => {
+                        if (err) {
+                            console.error("Error committing transaction:", err);
+                            return db_1.default.rollback(() => {
+                                res.status(500).json({
+                                    success: false,
+                                    message: "Error committing transaction",
+                                    error: err,
+                                });
+                            });
+                        }
+                        res.json({
+                            success: true,
+                            message: "Service, subservices, and categories deleted successfully",
+                        });
                     });
                 });
             });

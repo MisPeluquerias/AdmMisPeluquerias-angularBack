@@ -35,16 +35,16 @@ const storage = multer_1.default.diskStorage({
     },
 });
 const upload = (0, multer_1.default)({ storage: storage });
-router.get('/getAllSalon', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const page = parseInt(req.query.page || '1', 10);
-    const pageSize = parseInt(req.query.pageSize || '10', 10);
+router.get("/getAllSalon", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const page = parseInt(req.query.page || "1", 10);
+    const pageSize = parseInt(req.query.pageSize || "10", 10);
     const offset = (page - 1) * pageSize;
-    const search = req.query.search ? `%${req.query.search}%` : '%%';
+    const search = req.query.search ? `%${req.query.search}%` : "%%";
     const query = `
     SELECT 
       SQL_CALC_FOUND_ROWS 
       s.*,
-      GROUP_CONCAT(TRIM(REPLACE(c.categories, '; ', '')) SEPARATOR '; ') AS categories
+      GROUP_CONCAT(DISTINCT TRIM(REPLACE(c.categories, ' ;', '')) SEPARATOR '; ') AS categories
     FROM 
       salon s
     LEFT JOIN 
@@ -55,17 +55,21 @@ router.get('/getAllSalon', (req, res) => __awaiter(void 0, void 0, void 0, funct
       s.id_salon
     LIMIT ?, ?;
   `;
-    const countQuery = 'SELECT FOUND_ROWS() AS totalItems';
+    const countQuery = "SELECT FOUND_ROWS() AS totalItems";
     db_1.default.query(query, [search, search, search, search, search, search, search, offset, pageSize], (error, results) => {
         if (error) {
-            console.error('Error fetching data:', error);
-            res.status(500).json({ error: 'An error occurred while fetching data' });
+            console.error("Error fetching data:", error);
+            res
+                .status(500)
+                .json({ error: "An error occurred while fetching data" });
             return;
         }
         db_1.default.query(countQuery, (countError, countResults) => {
             if (countError) {
-                console.error('Error fetching count:', countError);
-                res.status(500).json({ error: 'An error occurred while fetching data count' });
+                console.error("Error fetching count:", countError);
+                res
+                    .status(500)
+                    .json({ error: "An error occurred while fetching data count" });
                 return;
             }
             const totalItems = countResults[0].totalItems;
@@ -93,52 +97,59 @@ router.post("/updateExcel", upload.single("file"), (req, res) => __awaiter(void 
         const workbook = new exceljs_1.default.Workbook();
         yield workbook.xlsx.readFile(filePath);
         const worksheet = workbook.worksheets[0];
-        // Verificar la estructura del archivo
-        const requiredColumns = 27; // Número de columnas requeridas, incluyendo servicios y subservicios
+        // Verificar la estructura del archivo antes de procesar filas
+        const requiredColumns = 27; // Número de columnas requeridas
         if (worksheet.columns.length < requiredColumns) {
             console.log("Invalid Excel file structure. Expected columns:", requiredColumns, "but got:", worksheet.columns.length);
             return res.status(400).json({ error: "Invalid Excel file structure" });
         }
-        // **Eliminar todas las categorías y resetear el AUTO_INCREMENT una sola vez**
-        yield new Promise((resolve, reject) => {
-            db_1.default.query('DELETE FROM categories', (error, results) => {
-                if (error) {
-                    console.error("Error deleting all categories:", error);
-                    return reject(error);
-                }
-                //console.log(`All categories deleted.`);
-                // Reiniciar el valor de autoincremento de id_category
-                db_1.default.query('ALTER TABLE categories AUTO_INCREMENT = 1', (alterError, alterResults) => {
-                    if (alterError) {
-                        console.error("Error resetting AUTO_INCREMENT for categories:", alterError);
-                        return reject(alterError);
-                    }
-                    //console.log(`AUTO_INCREMENT reset for categories table.`);
-                    resolve(results);
-                });
-            });
-        });
-        yield new Promise((resolve, reject) => {
-            db_1.default.query('DELETE FROM salon_service_type', (error, results) => {
-                if (error) {
-                    console.error("Error deleting all services and subservices:", error);
-                    return reject(error);
-                }
-                //console.log(`All services and subservices deleted.`);
-                // Reiniciar el valor de autoincremento de id_salon_service_type
-                db_1.default.query('ALTER TABLE salon_service_type AUTO_INCREMENT = 1', (alterError, alterResults) => {
-                    if (alterError) {
-                        console.error("Error resetting AUTO_INCREMENT for salon_service_type:", alterError);
-                        return reject(alterError);
-                    }
-                    //console.log(`AUTO_INCREMENT reset for salon_service_type table.`);
-                    resolve(results);
-                });
-            });
-        });
-        // Ahora procesamos cada fila del Excel
+        // Procesar filas: eliminar o insertar/actualizar según corresponda
         for (let rowIndex = 2; rowIndex <= worksheet.rowCount; rowIndex++) {
             const row = worksheet.getRow(rowIndex);
+            const eliminarValue = row.getCell(24).value; // Columna 24 es la de "Eliminar"
+            const salonId = row.getCell(1).value; // ID del salón (columna 1)
+            // Verificar si es necesario eliminar
+            if (eliminarValue === 1 && salonId) {
+                console.log(`Fila ${rowIndex} marcada para eliminación. Eliminando salón con ID: ${salonId}`);
+                // Eliminar categorías relacionadas antes de eliminar el salón
+                yield new Promise((resolve, reject) => {
+                    const deleteCategoriesQuery = `DELETE FROM categories WHERE id_salon = ?`;
+                    db_1.default.query(deleteCategoriesQuery, [salonId], (error, results) => {
+                        if (error) {
+                            console.error(`Error deleting categories for salon ID ${salonId}:`, error);
+                            return reject(error);
+                        }
+                        console.log(`Categories for salon ID ${salonId} deleted successfully.`);
+                        resolve(results);
+                    });
+                });
+                // Eliminar servicios y subservicios relacionados antes de eliminar el salón
+                yield new Promise((resolve, reject) => {
+                    const deleteSalonServicesQuery = `DELETE FROM salon_service_type WHERE id_salon = ?`;
+                    db_1.default.query(deleteSalonServicesQuery, [salonId], (error, results) => {
+                        if (error) {
+                            console.error(`Error deleting salon services for salon ID ${salonId}:`, error);
+                            return reject(error);
+                        }
+                        console.log(`Salon services for salon ID ${salonId} deleted successfully.`);
+                        resolve(results);
+                    });
+                });
+                // Ahora podemos eliminar el salón
+                yield new Promise((resolve, reject) => {
+                    const deleteSalonQuery = `DELETE FROM salon WHERE id_salon = ?`;
+                    db_1.default.query(deleteSalonQuery, [salonId], (error, results) => {
+                        if (error) {
+                            console.error(`Error deleting salon with ID ${salonId}:`, error);
+                            return reject(error);
+                        }
+                        console.log(`Salon with ID ${salonId} deleted successfully.`);
+                        resolve(results);
+                    });
+                });
+                continue; // Saltar a la siguiente fila si se eliminó
+            }
+            // Si no se va a eliminar, procesamos para actualizar o insertar
             const salon = {
                 id_salon: row.getCell(1).value,
                 id_city: row.getCell(2).value,
@@ -168,8 +179,6 @@ router.post("/updateExcel", upload.single("file"), (req, res) => __awaiter(void 
                 services: row.getCell(26).value, // Columna para servicios
                 subservices: row.getCell(27).value // Columna para subservicios
             };
-            //console.log(`Processing row ${rowIndex}:`, salon);
-            // **Insertar o actualizar el salón**
             const salonQuery = `
         INSERT INTO salon (id_salon, id_city, plus_code, active, state, in_vacation, name, address, latitud, longitud, email, url, phone, map, iframe, image, about_us, score_old, hours_old, zip_code_old, overview_old, created_at, updated_at, deleted_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -206,11 +215,10 @@ router.post("/updateExcel", upload.single("file"), (req, res) => __awaiter(void 
                         console.error("Error updating or inserting salon:", error);
                         return reject(error);
                     }
-                    //console.log(`Salon with ID ${salon.id_salon} updated or inserted successfully.`);
                     resolve(results);
                 });
             });
-            // **Insertar nuevas categorías**
+            // Procesar categorías
             const categories = (typeof salon.categories === 'string') ? salon.categories.split(';').map(cat => cat.trim()) : [];
             for (const category of categories) {
                 const categoryQuery = `INSERT INTO categories (id_salon, categories) VALUES (?, ?) ON DUPLICATE KEY UPDATE categories = VALUES(categories)`;
@@ -220,44 +228,18 @@ router.post("/updateExcel", upload.single("file"), (req, res) => __awaiter(void 
                             console.error("Error inserting or updating category:", error);
                             return reject(error);
                         }
-                        //console.log(`Category ${category} updated/inserted for salon ID ${salon.id_salon}`);
                         resolve(results);
                     });
                 });
             }
-            /*
-            // **Eliminar servicios y subservicios asociados**
-             await new Promise((resolve, reject) => {
-              connection.query('DELETE FROM salon_service_type WHERE id_salon = ?', [salon.id_salon], (error, results) => {
-                if (error) {
-                  console.error("Error deleting old services and subservices:", error);
-                  return reject(error);
-                }
-                console.log(`Deleted services and subservices for salon ID ${salon.id_salon}`);
-      
-                // **Reiniciar el valor de autoincremento de id_salon_service_type**
-                connection.query('ALTER TABLE salon_service_type AUTO_INCREMENT = 1', (alterError, alterResults) => {
-                  if (alterError) {
-                    console.error("Error resetting AUTO_INCREMENT for salon_service_type:", alterError);
-                    return reject(alterError);
-                  }
-                  console.log(`AUTO_INCREMENT reset for salon_service_type table.`);
-                  resolve(results);
-                });
-              });
-            });
-      
-            */
             // Procesar servicios y subservicios
             const services = typeof salon.services === 'string' ? salon.services.split(',').map(s => s.trim()) : [];
             const subservices = typeof salon.subservices === 'string' ? salon.subservices.split(',').map(s => s.trim()) : [];
-            // Aquí verificamos que cada servicio tenga su respectivo subservicio, asignando uno o varios subservicios al mismo servicio
+            // Relacionar servicios y subservicios
             for (let i = 0; i < services.length; i++) {
                 const service = services[i];
-                const relatedSubservices = subservices.filter(sub => sub.startsWith(service)); // Filtrar subservicios relacionados al servicio
+                const relatedSubservices = subservices.filter(sub => sub.startsWith(service));
                 for (const subservice of relatedSubservices) {
-                    //console.log(`Processing service: ${service}, subservice: ${subservice}`);
-                    // Verificar si el servicio existe
                     const serviceData = yield new Promise((resolve, reject) => {
                         db_1.default.query('SELECT id_service FROM service WHERE name = ?', [service], (error, results) => {
                             if (error) {
@@ -265,19 +247,16 @@ router.post("/updateExcel", upload.single("file"), (req, res) => __awaiter(void 
                                 return reject(error);
                             }
                             if (Array.isArray(results) && results.length > 0) {
-                                resolve(results[0]); // Si el servicio existe
+                                resolve(results[0]);
                             }
                             else {
-                                console.log(`Error: Service '${service}' does not exist.`);
                                 return reject(new Error(`Service '${service}' does not exist.`));
                             }
                         });
                     });
                     if (!serviceData) {
-                        console.log(`Skipping insertion for service: ${service} because it does not exist.`);
                         continue;
                     }
-                    // Verificar si el subservicio existe
                     const subserviceData = yield new Promise((resolve, reject) => {
                         db_1.default.query('SELECT id_service_type FROM service_type WHERE name = ? AND id_service = ?', [subservice, serviceData.id_service], (error, results) => {
                             if (error) {
@@ -285,27 +264,22 @@ router.post("/updateExcel", upload.single("file"), (req, res) => __awaiter(void 
                                 return reject(error);
                             }
                             if (Array.isArray(results) && results.length > 0) {
-                                resolve(results[0]); // Si el subservicio existe
+                                resolve(results[0]);
                             }
                             else {
-                                console.log(`Error: Subservice '${subservice}' does not exist for service '${service}'.`);
                                 return reject(new Error(`Subservice '${subservice}' does not exist for service '${service}'.`));
                             }
                         });
                     });
                     if (!subserviceData) {
-                        console.log(`Skipping insertion for subservice: ${subservice} because it does not exist.`);
                         continue;
                     }
-                    // Insertar la relación entre salón, servicio y subservicio
-                    //console.log(`Inserting new relation between salon ID ${salon.id_salon}, service ID ${serviceData.id_service}, and subservice ID ${subserviceData.id_service_type}`);
                     yield new Promise((resolve, reject) => {
                         db_1.default.query('INSERT INTO salon_service_type (id_salon, id_service, id_service_type) VALUES (?, ?, ?)', [salon.id_salon, serviceData.id_service, subserviceData.id_service_type], (error, results) => {
                             if (error) {
                                 console.error(`Error inserting salon_service_type for salon ID ${salon.id_salon}:`, error);
                                 return reject(error);
                             }
-                            //console.log(`New relation inserted for salon ID ${salon.id_salon}`);
                             resolve(results);
                         });
                     });
@@ -314,7 +288,6 @@ router.post("/updateExcel", upload.single("file"), (req, res) => __awaiter(void 
         }
         // Eliminar el archivo temporal después de procesarlo
         fs_1.default.unlinkSync(filePath);
-        //console.log("Excel file processed and deleted successfully.");
         res.json({ message: "Excel file processed successfully" });
     }
     catch (error) {

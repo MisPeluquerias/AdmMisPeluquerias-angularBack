@@ -188,6 +188,8 @@ router.get("/searchCategoryInLive", async (req, res) => {
   }
 });
 
+
+
 router.post("/addBrand", upload.single("brandImage"), async (req, res) => {
   try {
     const { name, categories } = req.body; // Recibir las categorías desde el cliente
@@ -329,6 +331,9 @@ router.post("/addBrand", upload.single("brandImage"), async (req, res) => {
     res.status(500).json({ error: "Ocurrió un error inesperado" });
   }
 });
+
+
+
 
 router.post("/deleteBrand", (req, res) => {
   const { id_brand } = req.body;
