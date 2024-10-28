@@ -80,7 +80,6 @@ router.get("/getAllSalon", async (req, res) => {
 
 
 import { RowDataPacket } from 'mysql2';
-
 router.post("/updateExcel", upload.single("file"), async (req, res) => {
   res.set("Cache-Control", "no-store");
 
@@ -217,6 +216,27 @@ router.post("/updateExcel", upload.single("file"), async (req, res) => {
         );
       });
 
+      // Eliminar todas las categorías existentes para el salón y volver a insertar las actuales
+      await new Promise((resolve, reject) => {
+        connection.query('DELETE FROM categories WHERE id_salon = ?', [salon.id_salon], (error, results) => {
+          if (error) return reject(error);
+          resolve(results);
+        });
+      });
+
+      // Insertar las nuevas categorías
+      const categories = typeof salon.categories === 'string' ? salon.categories.split(';').map(cat => cat.trim()) : [];
+      for (const category of categories) {
+        await new Promise((resolve, reject) => {
+          const insertCategoryQuery = `INSERT INTO categories (id_salon, categories) VALUES (?, ?)`;
+          connection.query(insertCategoryQuery, [salon.id_salon, category], (error, results) => {
+            if (error) return reject(error);
+            resolve(results);
+          });
+        });
+      }
+
+      // Procesar servicios y subservicios
       const services = typeof salon.services === 'string' ? salon.services.split(',').map(s => s.trim()) : [];
       const subservices = typeof salon.subservices === 'string' ? salon.subservices.split(',').map(s => s.trim()) : [];
 

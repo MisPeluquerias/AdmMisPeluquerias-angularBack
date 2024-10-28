@@ -196,6 +196,27 @@ router.post("/updateExcel", upload.single("file"), (req, res) => __awaiter(void 
                     resolve(results);
                 });
             });
+            // Eliminar todas las categorías existentes para el salón y volver a insertar las actuales
+            yield new Promise((resolve, reject) => {
+                db_1.default.query('DELETE FROM categories WHERE id_salon = ?', [salon.id_salon], (error, results) => {
+                    if (error)
+                        return reject(error);
+                    resolve(results);
+                });
+            });
+            // Insertar las nuevas categorías
+            const categories = typeof salon.categories === 'string' ? salon.categories.split(';').map(cat => cat.trim()) : [];
+            for (const category of categories) {
+                yield new Promise((resolve, reject) => {
+                    const insertCategoryQuery = `INSERT INTO categories (id_salon, categories) VALUES (?, ?)`;
+                    db_1.default.query(insertCategoryQuery, [salon.id_salon, category], (error, results) => {
+                        if (error)
+                            return reject(error);
+                        resolve(results);
+                    });
+                });
+            }
+            // Procesar servicios y subservicios
             const services = typeof salon.services === 'string' ? salon.services.split(',').map(s => s.trim()) : [];
             const subservices = typeof salon.subservices === 'string' ? salon.subservices.split(',').map(s => s.trim()) : [];
             for (let i = 0; i < services.length; i++) {
