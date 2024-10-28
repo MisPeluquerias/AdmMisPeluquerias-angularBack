@@ -79,7 +79,7 @@ router.get("/getAllSalon", async (req, res) => {
 
 
 
-import { RowDataPacket } from 'mysql2';
+
 router.post("/updateExcel", upload.single("file"), async (req, res) => {
   res.set("Cache-Control", "no-store");
 
