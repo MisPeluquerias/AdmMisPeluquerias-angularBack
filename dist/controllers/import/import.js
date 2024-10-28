@@ -83,7 +83,6 @@ router.post("/updateExcel", upload.single("file"), (req, res) => __awaiter(void 
         console.log("No file uploaded.");
         return res.status(400).json({ error: "No file uploaded" });
     }
-    // Verificar tipo de archivo
     if (req.file.mimetype !== 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
         console.log("Invalid file type:", req.file.mimetype);
         return res.status(400).json({ error: "Invalid file type" });
@@ -97,59 +96,40 @@ router.post("/updateExcel", upload.single("file"), (req, res) => __awaiter(void 
         const workbook = new exceljs_1.default.Workbook();
         yield workbook.xlsx.readFile(filePath);
         const worksheet = workbook.worksheets[0];
-        // Verificar la estructura del archivo antes de procesar filas
-        const requiredColumns = 27; // Número de columnas requeridas
+        const requiredColumns = 27;
         if (worksheet.columns.length < requiredColumns) {
             console.log("Invalid Excel file structure. Expected columns:", requiredColumns, "but got:", worksheet.columns.length);
             return res.status(400).json({ error: "Invalid Excel file structure" });
         }
-        // Procesar filas: eliminar o insertar/actualizar según corresponda
         for (let rowIndex = 2; rowIndex <= worksheet.rowCount; rowIndex++) {
             const row = worksheet.getRow(rowIndex);
-            const eliminarValue = row.getCell(24).value; // Columna 24 es la de "Eliminar"
-            const salonId = row.getCell(1).value; // ID del salón (columna 1)
-            // Verificar si es necesario eliminar
+            const eliminarValue = row.getCell(24).value;
+            const salonId = row.getCell(1).value;
             if (eliminarValue === 1 && salonId) {
-                console.log(`Fila ${rowIndex} marcada para eliminación. Eliminando salón con ID: ${salonId}`);
-                // Eliminar categorías relacionadas antes de eliminar el salón
+                console.log(`Deleting salon with ID: ${salonId}`);
                 yield new Promise((resolve, reject) => {
-                    const deleteCategoriesQuery = `DELETE FROM categories WHERE id_salon = ?`;
-                    db_1.default.query(deleteCategoriesQuery, [salonId], (error, results) => {
-                        if (error) {
-                            console.error(`Error deleting categories for salon ID ${salonId}:`, error);
+                    db_1.default.query('DELETE FROM categories WHERE id_salon = ?', [salonId], (error, results) => {
+                        if (error)
                             return reject(error);
-                        }
-                        console.log(`Categories for salon ID ${salonId} deleted successfully.`);
                         resolve(results);
                     });
                 });
-                // Eliminar servicios y subservicios relacionados antes de eliminar el salón
                 yield new Promise((resolve, reject) => {
-                    const deleteSalonServicesQuery = `DELETE FROM salon_service_type WHERE id_salon = ?`;
-                    db_1.default.query(deleteSalonServicesQuery, [salonId], (error, results) => {
-                        if (error) {
-                            console.error(`Error deleting salon services for salon ID ${salonId}:`, error);
+                    db_1.default.query('DELETE FROM salon_service_type WHERE id_salon = ?', [salonId], (error, results) => {
+                        if (error)
                             return reject(error);
-                        }
-                        console.log(`Salon services for salon ID ${salonId} deleted successfully.`);
                         resolve(results);
                     });
                 });
-                // Ahora podemos eliminar el salón
                 yield new Promise((resolve, reject) => {
-                    const deleteSalonQuery = `DELETE FROM salon WHERE id_salon = ?`;
-                    db_1.default.query(deleteSalonQuery, [salonId], (error, results) => {
-                        if (error) {
-                            console.error(`Error deleting salon with ID ${salonId}:`, error);
+                    db_1.default.query('DELETE FROM salon WHERE id_salon = ?', [salonId], (error, results) => {
+                        if (error)
                             return reject(error);
-                        }
-                        console.log(`Salon with ID ${salonId} deleted successfully.`);
                         resolve(results);
                     });
                 });
-                continue; // Saltar a la siguiente fila si se eliminó
+                continue;
             }
-            // Si no se va a eliminar, procesamos para actualizar o insertar
             const salon = {
                 id_salon: row.getCell(1).value,
                 id_city: row.getCell(2).value,
@@ -176,8 +156,8 @@ router.post("/updateExcel", upload.single("file"), (req, res) => __awaiter(void 
                 updated_at: row.getCell(23).value,
                 deleted_at: row.getCell(24).value,
                 categories: row.getCell(25).value,
-                services: row.getCell(26).value, // Columna para servicios
-                subservices: row.getCell(27).value // Columna para subservicios
+                services: row.getCell(26).value,
+                subservices: row.getCell(27).value
             };
             const salonQuery = `
         INSERT INTO salon (id_salon, id_city, plus_code, active, state, in_vacation, name, address, latitud, longitud, email, url, phone, map, iframe, image, about_us, score_old, hours_old, zip_code_old, overview_old, created_at, updated_at, deleted_at)
@@ -211,41 +191,21 @@ router.post("/updateExcel", upload.single("file"), (req, res) => __awaiter(void 
                     salon.updated_at,
                     salon.deleted_at,
                 ], (error, results) => {
-                    if (error) {
-                        console.error("Error updating or inserting salon:", error);
+                    if (error)
                         return reject(error);
-                    }
                     resolve(results);
                 });
             });
-            // Procesar categorías
-            const categories = (typeof salon.categories === 'string') ? salon.categories.split(';').map(cat => cat.trim()) : [];
-            for (const category of categories) {
-                const categoryQuery = `INSERT INTO categories (id_salon, categories) VALUES (?, ?) ON DUPLICATE KEY UPDATE categories = VALUES(categories)`;
-                yield new Promise((resolve, reject) => {
-                    db_1.default.query(categoryQuery, [salon.id_salon, category], (error, results) => {
-                        if (error) {
-                            console.error("Error inserting or updating category:", error);
-                            return reject(error);
-                        }
-                        resolve(results);
-                    });
-                });
-            }
-            // Procesar servicios y subservicios
             const services = typeof salon.services === 'string' ? salon.services.split(',').map(s => s.trim()) : [];
             const subservices = typeof salon.subservices === 'string' ? salon.subservices.split(',').map(s => s.trim()) : [];
-            // Relacionar servicios y subservicios
             for (let i = 0; i < services.length; i++) {
                 const service = services[i];
                 const relatedSubservices = subservices.filter(sub => sub.startsWith(service));
                 for (const subservice of relatedSubservices) {
                     const serviceData = yield new Promise((resolve, reject) => {
                         db_1.default.query('SELECT id_service FROM service WHERE name = ?', [service], (error, results) => {
-                            if (error) {
-                                console.error(`Error fetching service ID for ${service}:`, error);
+                            if (error)
                                 return reject(error);
-                            }
                             if (Array.isArray(results) && results.length > 0) {
                                 resolve(results[0]);
                             }
@@ -254,15 +214,12 @@ router.post("/updateExcel", upload.single("file"), (req, res) => __awaiter(void 
                             }
                         });
                     });
-                    if (!serviceData) {
+                    if (!serviceData)
                         continue;
-                    }
                     const subserviceData = yield new Promise((resolve, reject) => {
                         db_1.default.query('SELECT id_service_type FROM service_type WHERE name = ? AND id_service = ?', [subservice, serviceData.id_service], (error, results) => {
-                            if (error) {
-                                console.error(`Error fetching subservice ID for ${subservice}:`, error);
+                            if (error)
                                 return reject(error);
-                            }
                             if (Array.isArray(results) && results.length > 0) {
                                 resolve(results[0]);
                             }
@@ -271,22 +228,28 @@ router.post("/updateExcel", upload.single("file"), (req, res) => __awaiter(void 
                             }
                         });
                     });
-                    if (!subserviceData) {
+                    if (!subserviceData)
                         continue;
-                    }
-                    yield new Promise((resolve, reject) => {
-                        db_1.default.query('INSERT INTO salon_service_type (id_salon, id_service, id_service_type) VALUES (?, ?, ?)', [salon.id_salon, serviceData.id_service, subserviceData.id_service_type], (error, results) => {
-                            if (error) {
-                                console.error(`Error inserting salon_service_type for salon ID ${salon.id_salon}:`, error);
+                    const serviceExists = yield new Promise((resolve, reject) => {
+                        db_1.default.query('SELECT 1 FROM salon_service_type WHERE id_salon = ? AND id_service = ? AND id_service_type = ?', [salon.id_salon, serviceData.id_service, subserviceData.id_service_type], (error, results) => {
+                            if (error)
                                 return reject(error);
-                            }
-                            resolve(results);
+                            resolve(Array.isArray(results) && results.length > 0);
                         });
                     });
+                    // Solo insertar si la combinación de id_salon, id_service y id_service_type no existe
+                    if (!serviceExists) {
+                        yield new Promise((resolve, reject) => {
+                            db_1.default.query('INSERT INTO salon_service_type (id_salon, id_service, id_service_type) VALUES (?, ?, ?)', [salon.id_salon, serviceData.id_service, subserviceData.id_service_type], (error, results) => {
+                                if (error)
+                                    return reject(error);
+                                resolve(results);
+                            });
+                        });
+                    }
                 }
             }
         }
-        // Eliminar el archivo temporal después de procesarlo
         fs_1.default.unlinkSync(filePath);
         res.json({ message: "Excel file processed successfully" });
     }

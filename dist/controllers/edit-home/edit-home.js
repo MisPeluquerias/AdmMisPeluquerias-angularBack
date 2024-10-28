@@ -451,7 +451,7 @@ router.post("/createSalon", (req, res) => __awaiter(void 0, void 0, void 0, func
 }));
 router.get("/getUniqueServices/:category", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const category = req.params.category; // Obtiene la categoría de los parámetros de la URL
-    console.log(category);
+    //console.log(category);
     db_1.default.beginTransaction((err) => {
         if (err) {
             return res.status(500).json({

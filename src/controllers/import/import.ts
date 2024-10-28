@@ -79,6 +79,8 @@ router.get("/getAllSalon", async (req, res) => {
 
 
 
+import { RowDataPacket } from 'mysql2';
+
 router.post("/updateExcel", upload.single("file"), async (req, res) => {
   res.set("Cache-Control", "no-store");
 
@@ -87,7 +89,6 @@ router.post("/updateExcel", upload.single("file"), async (req, res) => {
     return res.status(400).json({ error: "No file uploaded" });
   }
 
-  // Verificar tipo de archivo
   if (req.file.mimetype !== 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
     console.log("Invalid file type:", req.file.mimetype);
     return res.status(400).json({ error: "Invalid file type" });
@@ -105,67 +106,45 @@ router.post("/updateExcel", upload.single("file"), async (req, res) => {
     await workbook.xlsx.readFile(filePath);
     const worksheet = workbook.worksheets[0];
 
-    // Verificar la estructura del archivo antes de procesar filas
-    const requiredColumns = 27; // Número de columnas requeridas
+    const requiredColumns = 27;
     if (worksheet.columns.length < requiredColumns) {
       console.log("Invalid Excel file structure. Expected columns:", requiredColumns, "but got:", worksheet.columns.length);
       return res.status(400).json({ error: "Invalid Excel file structure" });
     }
 
-    // Procesar filas: eliminar o insertar/actualizar según corresponda
     for (let rowIndex = 2; rowIndex <= worksheet.rowCount; rowIndex++) {
       const row = worksheet.getRow(rowIndex);
 
-      const eliminarValue = row.getCell(24).value; // Columna 24 es la de "Eliminar"
-      const salonId = row.getCell(1).value; // ID del salón (columna 1)
+      const eliminarValue = row.getCell(24).value;
+      const salonId = row.getCell(1).value;
 
-      // Verificar si es necesario eliminar
       if (eliminarValue === 1 && salonId) {
-        console.log(`Fila ${rowIndex} marcada para eliminación. Eliminando salón con ID: ${salonId}`);
+        console.log(`Deleting salon with ID: ${salonId}`);
 
-        // Eliminar categorías relacionadas antes de eliminar el salón
         await new Promise((resolve, reject) => {
-          const deleteCategoriesQuery = `DELETE FROM categories WHERE id_salon = ?`;
-          connection.query(deleteCategoriesQuery, [salonId], (error, results) => {
-            if (error) {
-              console.error(`Error deleting categories for salon ID ${salonId}:`, error);
-              return reject(error);
-            }
-            console.log(`Categories for salon ID ${salonId} deleted successfully.`);
+          connection.query('DELETE FROM categories WHERE id_salon = ?', [salonId], (error, results) => {
+            if (error) return reject(error);
             resolve(results);
           });
         });
 
-        // Eliminar servicios y subservicios relacionados antes de eliminar el salón
         await new Promise((resolve, reject) => {
-          const deleteSalonServicesQuery = `DELETE FROM salon_service_type WHERE id_salon = ?`;
-          connection.query(deleteSalonServicesQuery, [salonId], (error, results) => {
-            if (error) {
-              console.error(`Error deleting salon services for salon ID ${salonId}:`, error);
-              return reject(error);
-            }
-            console.log(`Salon services for salon ID ${salonId} deleted successfully.`);
+          connection.query('DELETE FROM salon_service_type WHERE id_salon = ?', [salonId], (error, results) => {
+            if (error) return reject(error);
             resolve(results);
           });
         });
 
-        // Ahora podemos eliminar el salón
         await new Promise((resolve, reject) => {
-          const deleteSalonQuery = `DELETE FROM salon WHERE id_salon = ?`;
-          connection.query(deleteSalonQuery, [salonId], (error, results) => {
-            if (error) {
-              console.error(`Error deleting salon with ID ${salonId}:`, error);
-              return reject(error);
-            }
-            console.log(`Salon with ID ${salonId} deleted successfully.`);
+          connection.query('DELETE FROM salon WHERE id_salon = ?', [salonId], (error, results) => {
+            if (error) return reject(error);
             resolve(results);
           });
         });
 
-        continue; // Saltar a la siguiente fila si se eliminó
+        continue;
       }
 
-      // Si no se va a eliminar, procesamos para actualizar o insertar
       const salon = {
         id_salon: row.getCell(1).value,
         id_city: row.getCell(2).value,
@@ -192,8 +171,8 @@ router.post("/updateExcel", upload.single("file"), async (req, res) => {
         updated_at: row.getCell(23).value,
         deleted_at: row.getCell(24).value,
         categories: row.getCell(25).value,
-        services: row.getCell(26).value, // Columna para servicios
-        subservices: row.getCell(27).value // Columna para subservicios
+        services: row.getCell(26).value,
+        subservices: row.getCell(27).value
       };
 
       const salonQuery = `
@@ -232,35 +211,15 @@ router.post("/updateExcel", upload.single("file"), async (req, res) => {
             salon.deleted_at,
           ],
           (error, results) => {
-            if (error) {
-              console.error("Error updating or inserting salon:", error);
-              return reject(error);
-            }
+            if (error) return reject(error);
             resolve(results);
           }
         );
       });
 
-      // Procesar categorías
-      const categories = (typeof salon.categories === 'string') ? salon.categories.split(';').map(cat => cat.trim()) : [];
-      for (const category of categories) {
-        const categoryQuery = `INSERT INTO categories (id_salon, categories) VALUES (?, ?) ON DUPLICATE KEY UPDATE categories = VALUES(categories)`;
-        await new Promise((resolve, reject) => {
-          connection.query(categoryQuery, [salon.id_salon, category], (error, results) => {
-            if (error) {
-              console.error("Error inserting or updating category:", error);
-              return reject(error);
-            }
-            resolve(results);
-          });
-        });
-      }
-
-      // Procesar servicios y subservicios
       const services = typeof salon.services === 'string' ? salon.services.split(',').map(s => s.trim()) : [];
       const subservices = typeof salon.subservices === 'string' ? salon.subservices.split(',').map(s => s.trim()) : [];
 
-      // Relacionar servicios y subservicios
       for (let i = 0; i < services.length; i++) {
         const service = services[i];
         const relatedSubservices = subservices.filter(sub => sub.startsWith(service));
@@ -268,10 +227,7 @@ router.post("/updateExcel", upload.single("file"), async (req, res) => {
         for (const subservice of relatedSubservices) {
           const serviceData = await new Promise<{ id_service: number } | null>((resolve, reject) => {
             connection.query('SELECT id_service FROM service WHERE name = ?', [service], (error, results: any) => {
-              if (error) {
-                console.error(`Error fetching service ID for ${service}:`, error);
-                return reject(error);
-              }
+              if (error) return reject(error);
               if (Array.isArray(results) && results.length > 0) {
                 resolve(results[0]);
               } else {
@@ -280,16 +236,11 @@ router.post("/updateExcel", upload.single("file"), async (req, res) => {
             });
           });
 
-          if (!serviceData) {
-            continue;
-          }
+          if (!serviceData) continue;
 
           const subserviceData = await new Promise<{ id_service_type: number } | null>((resolve, reject) => {
             connection.query('SELECT id_service_type FROM service_type WHERE name = ? AND id_service = ?', [subservice, serviceData.id_service], (error, results: any) => {
-              if (error) {
-                console.error(`Error fetching subservice ID for ${subservice}:`, error);
-                return reject(error);
-              }
+              if (error) return reject(error);
               if (Array.isArray(results) && results.length > 0) {
                 resolve(results[0]);
               } else {
@@ -298,35 +249,44 @@ router.post("/updateExcel", upload.single("file"), async (req, res) => {
             });
           });
 
-          if (!subserviceData) {
-            continue;
-          }
+          if (!subserviceData) continue;
 
-          await new Promise((resolve, reject) => {
+          const serviceExists = await new Promise<boolean>((resolve, reject) => {
             connection.query(
-              'INSERT INTO salon_service_type (id_salon, id_service, id_service_type) VALUES (?, ?, ?)',
+              'SELECT 1 FROM salon_service_type WHERE id_salon = ? AND id_service = ? AND id_service_type = ?',
               [salon.id_salon, serviceData.id_service, subserviceData.id_service_type],
-              (error, results) => {
-                if (error) {
-                  console.error(`Error inserting salon_service_type for salon ID ${salon.id_salon}:`, error);
-                  return reject(error);
-                }
-                resolve(results);
+              (error, results: any) => {
+                if (error) return reject(error);
+                resolve(Array.isArray(results) && results.length > 0);
               }
             );
           });
+
+          // Solo insertar si la combinación de id_salon, id_service y id_service_type no existe
+          if (!serviceExists) {
+            await new Promise((resolve, reject) => {
+              connection.query(
+                'INSERT INTO salon_service_type (id_salon, id_service, id_service_type) VALUES (?, ?, ?)',
+                [salon.id_salon, serviceData.id_service, subserviceData.id_service_type],
+                (error, results) => {
+                  if (error) return reject(error);
+                  resolve(results);
+                }
+              );
+            });
+          }
         }
       }
     }
 
-    // Eliminar el archivo temporal después de procesarlo
     fs.unlinkSync(filePath);
     res.json({ message: "Excel file processed successfully" });
-  } catch (error:any) {
+  } catch (error: any) {
     console.error("Error processing Excel file:", error);
     res.status(500).json({ error: error.message || "An error occurred while processing the Excel file" });
   }
 });
+
 
 
 
