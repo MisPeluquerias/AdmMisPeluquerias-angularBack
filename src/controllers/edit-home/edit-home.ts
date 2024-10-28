@@ -572,7 +572,10 @@ router.post("/createSalon", async (req: Request, res: Response) => {
   }
 });
 
-router.get("/getServices", async (req, res) => {
+router.get("/getUniqueServices/:category", async (req, res) => {
+  const category = req.params.category; // Obtiene la categoría de los parámetros de la URL
+
+  //console.log(category);
   connection.beginTransaction((err) => {
     if (err) {
       return res.status(500).json({
@@ -582,10 +585,15 @@ router.get("/getServices", async (req, res) => {
       });
     }
 
-    // Usar DISTINCT para seleccionar solo servicios únicos por nombre
-    const query = "SELECT DISTINCT id_service, name FROM service";
+    // Usar DISTINCT para seleccionar solo servicios únicos por nombre, filtrando por categoría
+    const query = `
+      SELECT DISTINCT s.id_service, s.name
+      FROM service AS s
+      INNER JOIN service_categories AS sc ON s.id_service = sc.id_service
+      WHERE sc.category = ?
+    `;
 
-    connection.query(query, (err, results) => {
+    connection.query(query, [category], (err, results) => {
       if (err) {
         return connection.rollback(() => {
           res.status(500).json({
@@ -633,6 +641,46 @@ router.get("/getAllCategoriesBrands", async (req, res) => {
           res.status(500).json({
             success: false,
             message: "Error fetching brands",
+            error: err,
+          });
+        });
+      }
+
+      connection.commit((err) => {
+        if (err) {
+          return connection.rollback(() => {
+            res.status(500).json({
+              success: false,
+              message: "Error committing transaction",
+              error: err,
+            });
+          });
+        }
+        res.json(results);
+      });
+    });
+  });
+});
+
+router.get("/getAllCategoriesServices", async (req, res) => {
+  connection.beginTransaction((err) => {
+    if (err) {
+      return res.status(500).json({
+        success: false,
+        message: "Error starting transaction",
+        error: err,
+      });
+    }
+
+    // Usar DISTINCT para seleccionar solo servicios únicos por nombre
+    const query = "SELECT DISTINCT category FROM service_categories";
+
+    connection.query(query, (err, results) => {
+      if (err) {
+        return connection.rollback(() => {
+          res.status(500).json({
+            success: false,
+            message: "Error fetching services categories",
             error: err,
           });
         });

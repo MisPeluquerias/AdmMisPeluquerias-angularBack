@@ -423,4 +423,76 @@ router.put('/updateSubservices/:service_type_ids', (req, res) => {
         }
     });
 });
+router.put('/updateCategories/:id_service', (req, res) => {
+    const id_service = req.params.id_service;
+    const { categories } = req.body;
+    //console.log('ID del servicio:', id_service);
+    //console.log('Nombres de categorías proporcionados por el frontend:', categories);
+    if (!categories || categories.length === 0) {
+        console.error('Error: No se proporcionaron categorías.');
+        return res.status(400).json({ error: 'Debe proporcionar al menos una categoría.' });
+    }
+    // Paso 1: Validar que todas las categorías existen en la tabla `categories`
+    const validationQuery = 'SELECT categories FROM categories WHERE categories IN (?)';
+    db_1.default.query(validationQuery, [categories], (err, validationResults) => {
+        if (err) {
+            console.error('Error verificando categorías:', err);
+            return res.status(500).json({ error: 'Error al verificar categorías.' });
+        }
+        // Crear un array de los nombres de las categorías existentes en la base de datos
+        const existingCategoryNames = validationResults.map((row) => row.categories);
+        // Verificar si alguna categoría no existe
+        const missingCategories = categories.filter((name) => !existingCategoryNames.includes(name));
+        if (missingCategories.length > 0) {
+            console.error('Categorías no encontradas:', missingCategories);
+            return res.status(400).json({ error: `Las categorías con nombre ${missingCategories.join(', ')} no existen.` });
+        }
+        // Paso 2: Obtener las categorías actuales en `service_categories` para el `id_service`
+        const existingQuery = 'SELECT category FROM service_categories WHERE id_service = ?';
+        db_1.default.query(existingQuery, [id_service], (err, existingResults) => {
+            if (err) {
+                console.error('Error obteniendo categorías existentes:', err);
+                return res.status(500).json({ error: 'Error al obtener categorías existentes.' });
+            }
+            // Obtenemos los nombres de las categorías que ya están asociadas con el servicio
+            const existingCategories = existingResults.map((row) => row.category);
+            // Determinar las categorías a eliminar e insertar
+            const categoriesToDelete = existingCategories.filter(name => !categories.includes(name));
+            const newCategories = categories.filter((name) => !existingCategories.includes(name));
+            // Paso 3: Realizar operaciones de eliminación
+            const deletePromises = categoriesToDelete.map(name => {
+                const deleteQuery = `DELETE FROM service_categories WHERE category = ? AND id_service = ?`;
+                return new Promise((resolve, reject) => {
+                    db_1.default.query(deleteQuery, [name, id_service], (error, results) => {
+                        if (error)
+                            reject(error);
+                        else
+                            resolve(results);
+                    });
+                });
+            });
+            // Paso 4: Realizar operaciones de inserción
+            const insertPromises = newCategories.map((name) => {
+                const insertQuery = `INSERT INTO service_categories (id_service, category) VALUES (?, ?)`;
+                return new Promise((resolve, reject) => {
+                    db_1.default.query(insertQuery, [id_service, name], (error, results) => {
+                        if (error)
+                            reject(error);
+                        else
+                            resolve(results);
+                    });
+                });
+            });
+            // Ejecutar todas las promesas: eliminación e inserción
+            Promise.all([...deletePromises, ...insertPromises])
+                .then(() => {
+                res.status(200).json({ success: true, message: 'Categorías actualizadas correctamente.' });
+            })
+                .catch(error => {
+                console.error('Error durante la actualización/inserción/eliminación:', error);
+                res.status(500).json({ error: 'Error al procesar las categorías.' });
+            });
+        });
+    });
+});
 exports.default = router;

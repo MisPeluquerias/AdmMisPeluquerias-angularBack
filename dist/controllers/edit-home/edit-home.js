@@ -449,7 +449,9 @@ router.post("/createSalon", (req, res) => __awaiter(void 0, void 0, void 0, func
         });
     }
 }));
-router.get("/getServices", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.get("/getUniqueServices/:category", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const category = req.params.category; // Obtiene la categoría de los parámetros de la URL
+    console.log(category);
     db_1.default.beginTransaction((err) => {
         if (err) {
             return res.status(500).json({
@@ -458,9 +460,14 @@ router.get("/getServices", (req, res) => __awaiter(void 0, void 0, void 0, funct
                 error: err,
             });
         }
-        // Usar DISTINCT para seleccionar solo servicios únicos por nombre
-        const query = "SELECT DISTINCT id_service, name FROM service";
-        db_1.default.query(query, (err, results) => {
+        // Usar DISTINCT para seleccionar solo servicios únicos por nombre, filtrando por categoría
+        const query = `
+      SELECT DISTINCT s.id_service, s.name
+      FROM service AS s
+      INNER JOIN service_categories AS sc ON s.id_service = sc.id_service
+      WHERE sc.category = ?
+    `;
+        db_1.default.query(query, [category], (err, results) => {
             if (err) {
                 return db_1.default.rollback(() => {
                     res.status(500).json({
@@ -502,6 +509,42 @@ router.get("/getAllCategoriesBrands", (req, res) => __awaiter(void 0, void 0, vo
                     res.status(500).json({
                         success: false,
                         message: "Error fetching brands",
+                        error: err,
+                    });
+                });
+            }
+            db_1.default.commit((err) => {
+                if (err) {
+                    return db_1.default.rollback(() => {
+                        res.status(500).json({
+                            success: false,
+                            message: "Error committing transaction",
+                            error: err,
+                        });
+                    });
+                }
+                res.json(results);
+            });
+        });
+    });
+}));
+router.get("/getAllCategoriesServices", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    db_1.default.beginTransaction((err) => {
+        if (err) {
+            return res.status(500).json({
+                success: false,
+                message: "Error starting transaction",
+                error: err,
+            });
+        }
+        // Usar DISTINCT para seleccionar solo servicios únicos por nombre
+        const query = "SELECT DISTINCT category FROM service_categories";
+        db_1.default.query(query, (err, results) => {
+            if (err) {
+                return db_1.default.rollback(() => {
+                    res.status(500).json({
+                        success: false,
+                        message: "Error fetching services categories",
                         error: err,
                     });
                 });
