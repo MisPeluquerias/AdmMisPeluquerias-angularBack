@@ -1056,77 +1056,50 @@ router.post("/updateReview", async (req, res) => {
 });
 
 
+
+
 router.put("/updateServiceWithSubservice", (req, res) => {
-  let { idSalonServiceType, idService, idServiceType, time, price, active } = req.body;
+  const { idSalonServiceType, time, price } = req.body;
 
-  console.log(req.body);
+  console.log("Request Body:", req.body);
 
-  // Validar que idServiceType sea un valor válido y no un objeto vacío
-  if (!typeof idServiceType || !idServiceType) {
-    console.error("idServiceType no es válido:", idServiceType);
-    return res.status(400).json({
-      success: false,
-      message: "El valor de idServiceType no es válido.",
-    });
-  }
-
-  // Consulta para verificar si ya existe otro subservicio asignado al mismo salón
-  const checkQuery = `
-    SELECT COUNT(*) AS count
-    FROM salon_service_type
-    WHERE id_salon_service_type != ? AND id_salon = (SELECT id_salon FROM salon_service_type WHERE id_salon_service_type = ?) AND id_service_type = ?;
-  `;
-
-  const checkParams = [idSalonServiceType, idSalonServiceType, idServiceType];
-
-  // Consulta única para actualizar los datos en la tabla
+  // Consulta para actualizar solo el tiempo y el precio
   const updateQuery = `
     UPDATE salon_service_type
-    SET id_service = ?, id_service_type = ?, time = ?, price = ?, active = ?
+    SET time = ?, price = ?
     WHERE id_salon_service_type = ?;
   `;
 
-  const queryParams = [idService, idServiceType, time, price, active, idSalonServiceType];
+  const queryParams = [time, price, idSalonServiceType];
 
-  // Verificar si ya existe otro subservicio asignado al mismo salón
-  connection.query(checkQuery, checkParams, (err, results: any) => {
+  // Ejecutar la consulta SQL para actualizar los datos
+  connection.query<OkPacket>(updateQuery, queryParams, (err, results) => {
     if (err) {
-      console.error("Error checking subservice:", err);
+      console.error("Error updating service:", err);
       return res.status(500).json({
         success: false,
-        message: "Error checking subservice",
+        message: "Error updating service",
         error: err,
       });
     }
 
-    if ((results as any)[0].count > 0) {
-      // Si ya existe otro subservicio, no permitir duplicados
-      return res.status(400).json({
+    // Verificar si la actualización afectó alguna fila
+    if (results.affectedRows === 0) {
+      return res.status(404).json({
         success: false,
-        message: "El subservicio ya existe para este salón.",
+        message: "Service not found",
       });
     }
 
-    // Ejecutar la consulta SQL para actualizar los datos
-    connection.query(updateQuery, queryParams, (err, results) => {
-      if (err) {
-        console.error("Error updating service:", err);
-        return res.status(500).json({
-          success: false,
-          message: "Error updating service",
-          error: err,
-        });
-      }
-
-      // Respuesta exitosa
-      res.json({
-        success: true,
-        message: "Service updated successfully",
-        data: results,
-      });
+    // Respuesta exitosa
+    res.json({
+      success: true,
+      message: "Service updated successfully",
+      data: results,
     });
   });
 });
+
 
 
 

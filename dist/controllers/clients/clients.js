@@ -67,4 +67,52 @@ router.post('/delete', (req, res) => {
         });
     });
 });
+router.post('/deleteClients', (req, res) => {
+    const { ids } = req.body;
+    console.log('IDs de clientes a eliminar:', ids);
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: 'No se proporcionaron IDs válidos para eliminar.' });
+    }
+    // Inicia la transacción
+    db_1.default.beginTransaction((err) => {
+        if (err) {
+            console.error('Error al iniciar la transacción:', err);
+            return res.status(500).json({ message: 'Error al iniciar la transacción.', error: err });
+        }
+        // Primero, elimina las reseñas asociadas a los usuarios
+        const deleteReviewsQuery = `DELETE FROM review WHERE id_user IN (?)`;
+        db_1.default.query(deleteReviewsQuery, [ids], (error) => {
+            if (error) {
+                // Si hay un error, se revierte la transacción
+                return db_1.default.rollback(() => {
+                    console.error('Error al eliminar reseñas:', error);
+                    res.status(500).json({ message: 'Error al eliminar las reseñas.', error });
+                });
+            }
+            // Ahora elimina los usuarios
+            const deleteUsersQuery = `DELETE FROM user WHERE id_user IN (?)`;
+            db_1.default.query(deleteUsersQuery, [ids], (error, results) => {
+                if (error) {
+                    // Si hay un error, se revierte la transacción
+                    return db_1.default.rollback(() => {
+                        console.error('Error al eliminar clientes:', error);
+                        res.status(500).json({ message: 'Error al eliminar los clientes.', error });
+                    });
+                }
+                // Confirmamos la transacción si todo va bien
+                db_1.default.commit((commitErr) => {
+                    if (commitErr) {
+                        // Si hay un error al confirmar, se revierte la transacción
+                        return db_1.default.rollback(() => {
+                            console.error('Error al confirmar la transacción:', commitErr);
+                            res.status(500).json({ message: 'Error al confirmar la transacción.', error: commitErr });
+                        });
+                    }
+                    // Si todo sale bien, enviamos la respuesta de éxito
+                    res.status(200).json({ message: 'Clientes eliminados con éxito.', affectedRows: results.affectedRows });
+                });
+            });
+        });
+    });
+});
 exports.default = router;

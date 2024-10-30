@@ -212,6 +212,64 @@ router.post('/addNewOwner', (req, res) => {
   });
 });
 
+router.post('/deleteOwners', (req, res) => {
+  const { ids } = req.body;
+
+  console.log('IDs de propietarios a eliminar:', ids);
+
+  if (!ids || !Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ message: 'No se proporcionaron IDs válidos para eliminar.' });
+  }
+
+  // Inicia la transacción
+  connection.beginTransaction((err) => {
+    if (err) {
+      console.error('Error al iniciar la transacción:', err);
+      return res.status(500).json({ message: 'Error al iniciar la transacción.', error: err });
+    }
+
+    // Primero, elimina las relaciones en user_salon
+    const deleteRelationsQuery = `DELETE FROM user_salon WHERE id_user IN (?)`;
+
+    connection.query(deleteRelationsQuery, [ids], (error) => {
+      if (error) {
+        // Si hay un error, se revierte la transacción
+        return connection.rollback(() => {
+          console.error('Error al eliminar relaciones de propietarios:', error);
+          res.status(500).json({ message: 'Error al eliminar las relaciones de propietarios.', error });
+        });
+      }
+
+      // Ahora elimina los usuarios
+      const deleteUsersQuery = `DELETE FROM user WHERE id_user IN (?)`;
+
+      connection.query(deleteUsersQuery, [ids], (error: any, results: any) => {
+        if (error) {
+          // Si hay un error, se revierte la transacción
+          return connection.rollback(() => {
+            console.error('Error al eliminar propietarios:', error);
+            res.status(500).json({ message: 'Error al eliminar los propietarios.', error });
+          });
+        }
+        
+        // Confirmamos la transacción si todo va bien
+        connection.commit((commitErr: any) => {
+          if (commitErr) {
+            // Si hay un error al confirmar, se revierte la transacción
+            return connection.rollback(() => {
+              console.error('Error al confirmar la transacción:', commitErr);
+              res.status(500).json({ message: 'Error al confirmar la transacción.', error: commitErr });
+            });
+          }
+        
+          // Si todo sale bien, enviamos la respuesta de éxito
+          res.status(200).json({ message: 'Propietarios eliminados con éxito.', affectedRows: results.affectedRows });
+        });
+      });
+    });    
+  });
+});
+
 
 
 

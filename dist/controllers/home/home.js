@@ -110,4 +110,52 @@ router.get('/getAllSalon', (req, res) => __awaiter(void 0, void 0, void 0, funct
         });
     });
 }));
+router.post('/deleteBusiness', (req, res) => {
+    const { ids } = req.body;
+    console.log('IDs de negocios a eliminar:', ids);
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: 'No se proporcionaron IDs válidos para eliminar.' });
+    }
+    // Inicia la transacción
+    db_1.default.beginTransaction((err) => {
+        if (err) {
+            console.error('Error al iniciar la transacción:', err);
+            return res.status(500).json({ message: 'Error al iniciar la transacción.', error: err });
+        }
+        // Primero, elimina las categorías asociadas a los salones
+        const deleteCategoriesQuery = `DELETE FROM categories WHERE id_salon IN (?)`;
+        db_1.default.query(deleteCategoriesQuery, [ids], (error) => {
+            if (error) {
+                // Si hay un error, se revierte la transacción
+                return db_1.default.rollback(() => {
+                    console.error('Error al eliminar categorías:', error);
+                    res.status(500).json({ message: 'Error al eliminar las categorías.', error });
+                });
+            }
+            // Ahora elimina los salones
+            const deleteSalonsQuery = `DELETE FROM salon WHERE id_salon IN (?)`;
+            db_1.default.query(deleteSalonsQuery, [ids], (error, results) => {
+                if (error) {
+                    // Si hay un error, se revierte la transacción
+                    return db_1.default.rollback(() => {
+                        console.error('Error al eliminar negocios:', error);
+                        res.status(500).json({ message: 'Error al eliminar los negocios.', error });
+                    });
+                }
+                // Confirmamos la transacción si todo va bien
+                db_1.default.commit((commitErr) => {
+                    if (commitErr) {
+                        // Si hay un error al confirmar, se revierte la transacción
+                        return db_1.default.rollback(() => {
+                            console.error('Error al confirmar la transacción:', commitErr);
+                            res.status(500).json({ message: 'Error al confirmar la transacción.', error: commitErr });
+                        });
+                    }
+                    // Si todo sale bien, enviamos la respuesta de éxito
+                    res.status(200).json({ message: 'Negocios eliminados con éxito.', affectedRows: results.affectedRows });
+                });
+            });
+        });
+    });
+});
 exports.default = router;

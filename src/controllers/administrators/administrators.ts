@@ -131,6 +131,51 @@ router.put('/addNewAdmin', (req, res) => {
 });
 
 
+router.post('/deleteAdministrators', (req, res) => {
+  const { ids } = req.body;
+
+  console.log('IDs de administradores a eliminar:', ids);
+
+  if (!ids || !Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ message: 'No se proporcionaron IDs válidos para eliminar.' });
+  }
+
+  // Inicia la transacción
+  connection.beginTransaction((err) => {
+    if (err) {
+      console.error('Error al iniciar la transacción:', err);
+      return res.status(500).json({ message: 'Error al iniciar la transacción.', error: err });
+    }
+
+    const query = `DELETE FROM user WHERE id_user IN (?)`;
+
+    // Ejecuta la consulta dentro de la transacción
+    connection.query(query, [ids], (error: any, results: any) => {
+      if (error) {
+        // Si hay un error, se revierte la transacción
+        return connection.rollback(() => {
+          console.error('Error al eliminar administradores:', error);
+          res.status(500).json({ message: 'Error al eliminar los administradores.', error });
+        });
+      }
+    
+      // Confirmamos la transacción si todo va bien
+      connection.commit((commitErr: any) => {
+        if (commitErr) {
+          // Si hay un error al confirmar, se revierte la transacción
+          return connection.rollback(() => {
+            console.error('Error al confirmar la transacción:', commitErr);
+            res.status(500).json({ message: 'Error al confirmar la transacción.', error: commitErr });
+          });
+        }
+    
+        // Si todo sale bien, enviamos la respuesta de éxito
+        res.status(200).json({ message: 'administradores eliminados con éxito.', affectedRows: results.affectedRows });
+      });
+    });    
+  });
+});
+
 
 
 export default router;

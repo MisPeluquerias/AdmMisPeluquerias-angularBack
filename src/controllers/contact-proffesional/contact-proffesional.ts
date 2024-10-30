@@ -64,7 +64,7 @@ router.post('/send-reply-contactProffesional', async (req, res) => {
 });
 
 
-1
+
 router.post('/send-new-email-contactProffesional', async (req, res) => {
   const { to, subject, message } = req.body;
   
@@ -196,5 +196,52 @@ router.put('/updateStateContactProffesional', async (req, res) => {
     res.status(500).json({ error: 'An error occurred while updating contact' });
   }
 });
+
+
+router.post('/deleteContactsProfessional', (req, res) => {
+  const { ids } = req.body;
+
+  console.log('IDs de contactos a eliminar:', ids);
+
+  if (!ids || !Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ message: 'No se proporcionaron IDs válidos para eliminar.' });
+  }
+
+  // Inicia la transacción
+  connection.beginTransaction((err) => {
+    if (err) {
+      console.error('Error al iniciar la transacción:', err);
+      return res.status(500).json({ message: 'Error al iniciar la transacción.', error: err });
+    }
+
+    const query = `DELETE FROM contact_proffesional WHERE id_contact IN (?)`;
+
+    // Ejecuta la consulta dentro de la transacción
+    connection.query(query, [ids], (error: any, results: any) => {
+      if (error) {
+        // Si hay un error, se revierte la transacción
+        return connection.rollback(() => {
+          console.error('Error al eliminar contactos:', error);
+          res.status(500).json({ message: 'Error al eliminar los contactos.', error });
+        });
+      }
+    
+      // Confirmamos la transacción si todo va bien
+      connection.commit((commitErr: any) => {
+        if (commitErr) {
+          // Si hay un error al confirmar, se revierte la transacción
+          return connection.rollback(() => {
+            console.error('Error al confirmar la transacción:', commitErr);
+            res.status(500).json({ message: 'Error al confirmar la transacción.', error: commitErr });
+          });
+        }
+    
+        // Si todo sale bien, enviamos la respuesta de éxito
+        res.status(200).json({ message: 'Contactos eliminados con éxito.', affectedRows: results.affectedRows });
+      });
+    });    
+  });
+});
+
 
 export default router;
