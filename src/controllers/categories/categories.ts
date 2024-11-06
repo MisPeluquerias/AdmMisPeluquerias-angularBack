@@ -83,10 +83,6 @@ router.get("/getAllCategories", async (req, res) => {
 
 
 
-
-
-
-
 router.put("/updateCategory", (req, res) => {
   const { OldCategory, newCategory } = req.body;
   /*console.log(
@@ -158,6 +154,8 @@ router.put("/updateCategory", (req, res) => {
     );
   });
 });
+
+
 
 router.post("/addCategory", async (req, res) => {
   try {

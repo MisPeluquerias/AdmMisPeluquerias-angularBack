@@ -662,6 +662,7 @@ router.get("/getAllCategoriesBrands", async (req, res) => {
   });
 });
 
+
 router.get("/getAllCategoriesServices", async (req, res) => {
   connection.beginTransaction((err) => {
     if (err) {
@@ -762,6 +763,9 @@ router.get("/getBrandsBySalon", (req, res) => {
   });
 });
 
+
+
+
 router.get("/getSubservicesByService", async (req, res) => {
   const { id_service } = req.query;
 
@@ -794,6 +798,8 @@ router.get("/getSubservicesByService", async (req, res) => {
     res.json({ success: true, data: results });
   });
 });
+
+
 
 router.post("/addService", (req, res) => {
   const { id_salon, id_service, id_service_type, time, price } = req.body;

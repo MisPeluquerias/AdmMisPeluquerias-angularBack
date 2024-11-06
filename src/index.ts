@@ -26,6 +26,7 @@ import editOwner from './controllers/edit-owner/edit-owner';
 import editCity from './controllers/edit-city/edit-city'
 import decodePermiso from './functions/decodeTokenPermiso';
 import Brands from './controllers/brands/brands';
+import categoriesJobs from './controllers/categories-jobs/categories-jobs';
 
 
 const app = express();
@@ -67,6 +68,7 @@ app.use('/edit-owner',editOwner);
 app.use('/edit-city',editCity);
 app.use('/decode-permiso',decodePermiso);
 app.use('/brands',Brands);
+app.use('/categories-jobs',categoriesJobs);
  
 
 

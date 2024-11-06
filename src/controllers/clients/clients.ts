@@ -40,6 +40,8 @@ router.get('/getAllClients', async (req, res) => {
   });
 });
 
+
+
 router.post('/delete', (req, res) => {
   const { id_user } = req.body;
 
@@ -64,6 +66,8 @@ router.post('/delete', (req, res) => {
     });
   });
 });
+
+
 
 
 router.post('/deleteClients', (req, res) => {
