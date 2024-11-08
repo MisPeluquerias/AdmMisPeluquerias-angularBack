@@ -645,7 +645,7 @@ router.get("/getSubservicesByService", (req, res) => __awaiter(void 0, void 0, v
 }));
 router.post("/addService", (req, res) => {
     const { id_salon, id_service, id_service_type, time, price } = req.body;
-    console.log("Datos recibidos:", req.body);
+    //console.log("Datos recibidos:", req.body);
     db_1.default.beginTransaction((err) => {
         if (err) {
             console.error("Error starting transaction:", err);

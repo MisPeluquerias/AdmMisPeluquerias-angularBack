@@ -803,7 +803,7 @@ router.get("/getSubservicesByService", async (req, res) => {
 
 router.post("/addService", (req, res) => {
   const { id_salon, id_service, id_service_type, time, price } = req.body;
-  console.log("Datos recibidos:", req.body);
+//console.log("Datos recibidos:", req.body);
 
   connection.beginTransaction((err) => {
     if (err) {

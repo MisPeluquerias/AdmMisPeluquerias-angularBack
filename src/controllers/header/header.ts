@@ -67,4 +67,5 @@ router.get('/getImgUser', async (req, res) => {
     });
   });
 
+  
   export default router;
