@@ -28,7 +28,7 @@ import decodePermiso from './functions/decodeTokenPermiso';
 import Brands from './controllers/brands/brands';
 import categoriesJobs from './controllers/categories-jobs/categories-jobs';
 import notifications from './controllers/notifications/notifications';
-
+import imgJobs from './controllers/img-jobs/img-jobs';
 
 const app = express();
 app.use(express.json());
@@ -71,6 +71,7 @@ app.use('/decode-permiso',decodePermiso);
 app.use('/brands',Brands);
 app.use('/categories-jobs',categoriesJobs);
 app.use('/notifications',notifications);
+app.use('/img-jobs',imgJobs);
  
 
 

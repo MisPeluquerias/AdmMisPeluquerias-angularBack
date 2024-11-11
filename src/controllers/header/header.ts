@@ -32,7 +32,7 @@ router.get('/getImgUser', async (req, res) => {
         console.error('Error starting transaction:', err);
         return res.status(500).json({ error: 'Error starting transaction' });
       }
-  
+      
       // Ejecutar la consulta
       const query = `
       SELECT avatar_path 

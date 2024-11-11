@@ -33,6 +33,7 @@ const decodeTokenPermiso_1 = __importDefault(require("./functions/decodeTokenPer
 const brands_1 = __importDefault(require("./controllers/brands/brands"));
 const categories_jobs_1 = __importDefault(require("./controllers/categories-jobs/categories-jobs"));
 const notifications_1 = __importDefault(require("./controllers/notifications/notifications"));
+const img_jobs_1 = __importDefault(require("./controllers/img-jobs/img-jobs"));
 const app = (0, express_1.default)();
 app.use(express_1.default.json());
 app.use((0, cors_1.default)());
@@ -69,6 +70,7 @@ app.use('/decode-permiso', decodeTokenPermiso_1.default);
 app.use('/brands', brands_1.default);
 app.use('/categories-jobs', categories_jobs_1.default);
 app.use('/notifications', notifications_1.default);
+app.use('/img-jobs', img_jobs_1.default);
 app.listen(3000, () => {
     console.log('Servidor iniciado en http://localhost:3000');
 });
