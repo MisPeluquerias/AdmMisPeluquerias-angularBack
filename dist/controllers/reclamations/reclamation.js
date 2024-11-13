@@ -15,11 +15,16 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const db_1 = __importDefault(require("../../db/db"));
 const body_parser_1 = __importDefault(require("body-parser"));
-const nodemailer = require('nodemailer');
+const nodemailer = require("nodemailer");
 const router = express_1.default.Router();
 router.use(body_parser_1.default.json());
-router.get('/getAllReclamations', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { page = '1', pageSize = '3', filterState } = req.query;
+const fs_1 = __importDefault(require("fs"));
+const path_1 = __importDefault(require("path"));
+const logoPath = path_1.default.join(__dirname, '../../../dist/assets/img/logo-mis-peluquerias-bk.jpg');
+const logoBase64 = fs_1.default.readFileSync(logoPath, "base64");
+const logoUrl = `data:image/jpeg;base64,${logoBase64}`;
+router.get("/getAllReclamations", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { page = "1", pageSize = "3", filterState, } = req.query;
     const pageNumber = parseInt(page, 10);
     const pageSizeNumber = parseInt(pageSize, 10);
     const offset = (pageNumber - 1) * pageSizeNumber;
@@ -38,12 +43,12 @@ router.get('/getAllReclamations', (req, res) => __awaiter(void 0, void 0, void 0
   `;
     // Manejo de filtros
     const queryParams = [];
-    if (filterState && filterState !== '%%') {
-        query += ' AND sr.state = ?';
+    if (filterState && filterState !== "%%") {
+        query += " AND sr.state = ?";
         queryParams.push(filterState);
     }
     // Añadir límites de paginación al final de la consulta
-    query += ' LIMIT ?, ?';
+    query += " LIMIT ?, ?";
     queryParams.push(offset, pageSizeNumber);
     // Consulta para contar el total de elementos sin paginación
     const countQuery = `
@@ -53,35 +58,45 @@ router.get('/getAllReclamations', (req, res) => __awaiter(void 0, void 0, void 0
     INNER JOIN city c ON sr.id_city = c.id_city
     INNER JOIN province p ON c.id_province = p.id_province
     WHERE 1=1
-  ` + (filterState && filterState !== '%%' ? ' AND sr.state = ?' : '');
+  ` + (filterState && filterState !== "%%" ? " AND sr.state = ?" : "");
     // Iniciar la transacción
-    db_1.default.beginTransaction(err => {
+    db_1.default.beginTransaction((err) => {
         if (err) {
-            console.error('Error starting transaction:', err);
-            return res.status(500).json({ error: 'An error occurred while starting transaction' });
+            console.error("Error starting transaction:", err);
+            return res
+                .status(500)
+                .json({ error: "An error occurred while starting transaction" });
         }
         // Ejecutar la consulta principal con filtros y paginación
         db_1.default.query(query, queryParams, (error, results) => {
             if (error) {
                 return db_1.default.rollback(() => {
-                    console.error('Error fetching data:', error);
-                    res.status(500).json({ error: 'An error occurred while fetching data' });
+                    console.error("Error fetching data:", error);
+                    res
+                        .status(500)
+                        .json({ error: "An error occurred while fetching data" });
                 });
             }
             // Ejecutar la consulta de conteo total
-            db_1.default.query(countQuery, filterState && filterState !== '%%' ? [filterState] : [], (countError, countResults) => {
+            db_1.default.query(countQuery, filterState && filterState !== "%%" ? [filterState] : [], (countError, countResults) => {
                 if (countError) {
                     return db_1.default.rollback(() => {
-                        console.error('Error fetching count:', countError);
-                        res.status(500).json({ error: 'An error occurred while fetching data count' });
+                        console.error("Error fetching count:", countError);
+                        res
+                            .status(500)
+                            .json({ error: "An error occurred while fetching data count" });
                     });
                 }
                 // Commit de la transacción
-                db_1.default.commit(commitError => {
+                db_1.default.commit((commitError) => {
                     if (commitError) {
                         return db_1.default.rollback(() => {
-                            console.error('Error committing transaction:', commitError);
-                            res.status(500).json({ error: 'An error occurred while committing transaction' });
+                            console.error("Error committing transaction:", commitError);
+                            res
+                                .status(500)
+                                .json({
+                                error: "An error occurred while committing transaction",
+                            });
                         });
                     }
                     // Manejo de los resultados de la consulta de conteo
@@ -101,11 +116,15 @@ router.get('/getAllReclamations', (req, res) => __awaiter(void 0, void 0, void 0
         });
     });
 }));
-router.put('/updateStateReclamation', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.put("/updateStateReclamation", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id_salon_reclamacion, state, id_user, salon_name, email } = req.body;
     //console.log('Reclamación recibida en el servidor:', req.body);
     if (!id_salon_reclamacion || !state || !id_user || !salon_name) {
-        return res.status(400).json({ error: 'Faltan datos requeridos: id_salon_reclamacion, state, id_user o salon_name' });
+        return res
+            .status(400)
+            .json({
+            error: "Faltan datos requeridos: id_salon_reclamacion, state, id_user o salon_name",
+        });
     }
     try {
         yield new Promise((resolve, reject) => {
@@ -129,9 +148,9 @@ router.put('/updateStateReclamation', (req, res) => __awaiter(void 0, void 0, vo
             });
         });
         if (updateResults.affectedRows === 0) {
-            throw new Error('No se encontró la reclamación con el ID proporcionado.');
+            throw new Error("No se encontró la reclamación con el ID proporcionado.");
         }
-        if (state === 'Pendiente' || state === 'En revision') {
+        if (state === "Pendiente" || state === "En revision") {
             // Primero obtenemos el id_salon por nombre del salón
             const getSalonIdQuery = `
         SELECT id_salon FROM salon WHERE name = ?
@@ -145,7 +164,7 @@ router.put('/updateStateReclamation', (req, res) => __awaiter(void 0, void 0, vo
             });
             // Verificamos si se encontró el salón
             if (salonResult.length === 0) {
-                throw new Error('No se encontró un salón con el nombre proporcionado.');
+                throw new Error("No se encontró un salón con el nombre proporcionado.");
             }
             const id_salon = salonResult[0].id_salon;
             // Luego actualizamos el estado del salón a 'Validado'
@@ -160,7 +179,7 @@ router.put('/updateStateReclamation', (req, res) => __awaiter(void 0, void 0, vo
                 });
             });
         }
-        if (state === 'Validado') {
+        if (state === "Validado") {
             // Primero obtenemos el id_salon por nombre del salón
             const getSalonIdQuery = `
         SELECT id_salon FROM salon WHERE name = ?
@@ -174,7 +193,7 @@ router.put('/updateStateReclamation', (req, res) => __awaiter(void 0, void 0, vo
             });
             // Verificamos si se encontró el salón
             if (salonResult.length === 0) {
-                throw new Error('No se encontró un salón con el nombre proporcionado.');
+                throw new Error("No se encontró un salón con el nombre proporcionado.");
             }
             const id_salon = salonResult[0].id_salon;
             // Luego actualizamos el estado del salón a 'Validado'
@@ -190,11 +209,11 @@ router.put('/updateStateReclamation', (req, res) => __awaiter(void 0, void 0, vo
             });
             // Verificamos si la actualización fue exitosa
             if (updateSalonResults.affectedRows === 0) {
-                throw new Error('Error al actualizar el estado del salón.');
+                throw new Error("Error al actualizar el estado del salón.");
             }
         }
         // Acción para estado 'Reclamado'
-        if (state === 'Reclamado') {
+        if (state === "Reclamado") {
             try {
                 // Obtener el id_salon basado en el nombre del salón
                 const getSalonIdQuery = `
@@ -208,7 +227,7 @@ router.put('/updateStateReclamation', (req, res) => __awaiter(void 0, void 0, vo
                     });
                 });
                 if (salonResult.length === 0) {
-                    throw new Error('No se encontró un salón con el nombre proporcionado.');
+                    throw new Error("No se encontró un salón con el nombre proporcionado.");
                 }
                 const id_salon = salonResult[0].id_salon;
                 // Insertar el usuario en user_salon
@@ -224,7 +243,7 @@ router.put('/updateStateReclamation', (req, res) => __awaiter(void 0, void 0, vo
                     });
                 });
                 if (insertResults.affectedRows === 0) {
-                    throw new Error('Error al insertar el registro en la tabla user_salon.');
+                    throw new Error("Error al insertar el registro en la tabla user_salon.");
                 }
                 // Actualizar el estado del salón a 'Reclamado'
                 const updateSalonStateQuery = `
@@ -253,27 +272,30 @@ router.put('/updateStateReclamation', (req, res) => __awaiter(void 0, void 0, vo
                         const result = results;
                         // Verificamos si hubo filas afectadas
                         if (result.affectedRows === 0) {
-                            return reject(new Error('No se encontró el usuario con el ID proporcionado.'));
+                            return reject(new Error("No se encontró el usuario con el ID proporcionado."));
                         }
                         resolve(result);
                     });
                 });
                 // Enviar correo si el email está definido y no es vacío
-                if (email && email.trim() !== '') {
+                if (email && email.trim() !== "") {
                     const transporter = nodemailer.createTransport({
-                        host: 'mail.mispeluquerias.com',
+                        host: "mail.mispeluquerias.com",
                         port: 465,
                         secure: true,
                         auth: {
-                            user: 'comunicaciones@mispeluquerias.com',
-                            pass: 'MisP2024@',
+                            user: "comunicaciones@mispeluquerias.com",
+                            pass: "MisP2024@",
                         },
                     });
                     const mailOptions = {
                         from: '"mispeluquerias.com" <comunicaciones@mispeluquerias.com>',
                         to: email,
-                        subject: 'Reclamación Reclamada',
+                        subject: "Reclamación Reclamada",
                         html: `
+              <div style="text-align: center;">
+                <img src="${logoUrl}" alt="Logo de Mis Peluquerías" style="width: 400px; border-radius: 4px;box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); margin-bottom: 20px;" />
+              </div>
               <p>¡Enhorabuena! Tu reclamación ha sido registrada exitosamente para el salón ${salon_name}.</p>
               <p>Para administrar tu establecimiento, visita la plataforma 
                 <a href="https://adm.mispeluquerias.com/login" target="_blank" style="color: #007bff; text-decoration: underline;">
@@ -285,15 +307,15 @@ router.put('/updateStateReclamation', (req, res) => __awaiter(void 0, void 0, vo
                     };
                     transporter.sendMail(mailOptions, (error, info) => {
                         if (error instanceof Error) {
-                            console.error('Error al enviar el correo:', error.message);
+                            console.error("Error al enviar el correo:", error.message);
                         }
                         else {
-                            console.log('Correo enviado:', info.response);
+                            console.log("Correo enviado:", info.response);
                         }
                     });
                 }
                 else {
-                    console.error('El correo electrónico del usuario no está definido o es inválido.');
+                    console.error("El correo electrónico del usuario no está definido o es inválido.");
                 }
             }
             catch (error) {
@@ -302,7 +324,9 @@ router.put('/updateStateReclamation', (req, res) => __awaiter(void 0, void 0, vo
             }
         }
         // Acción para estado 'Pendiente' o 'En revisión': eliminar el registro de user_salon
-        if (state === 'Pendiente' || state === 'En revisión' || state === 'Validado') {
+        if (state === "Pendiente" ||
+            state === "En revisión" ||
+            state === "Validado") {
             const deleteUserSalonQuery = `
         DELETE FROM user_salon
         WHERE id_user = ? AND id_salon = (
@@ -347,17 +371,21 @@ router.put('/updateStateReclamation', (req, res) => __awaiter(void 0, void 0, vo
                 resolve();
             });
         });
-        res.json({ message: 'Reclamación y permisos actualizados exitosamente.' });
+        res.json({ message: "Reclamación y permisos actualizados exitosamente." });
     }
     catch (error) {
         if (error instanceof Error) {
-            console.error('Error al actualizar la reclamación o permisos:', error.message);
+            console.error("Error al actualizar la reclamación o permisos:", error.message);
         }
         else {
-            console.error('Error desconocido al actualizar la reclamación o permisos:', error);
+            console.error("Error desconocido al actualizar la reclamación o permisos:", error);
         }
         db_1.default.rollback(() => {
-            res.status(500).json({ error: 'Ocurrió un error al actualizar la reclamación o los permisos del usuario.' });
+            res
+                .status(500)
+                .json({
+                error: "Ocurrió un error al actualizar la reclamación o los permisos del usuario.",
+            });
         });
     }
 }));

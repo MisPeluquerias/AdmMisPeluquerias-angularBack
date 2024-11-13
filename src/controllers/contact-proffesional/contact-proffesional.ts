@@ -2,10 +2,17 @@ import express from 'express';
 import connection from '../../db/db';
 import bodyParser from 'body-parser';
 import { RowDataPacket } from 'mysql2';
+import path from 'path';
+import fs from 'fs';
 
 const nodemailer = require('nodemailer');
 const router = express.Router();
 router.use(bodyParser.json());
+
+const logoPath = path.join(__dirname, '../../../dist/assets/img/logo-mis-peluquerias-bk.jpg');
+const logoBase64 = fs.readFileSync(logoPath, 'base64');
+const logoUrl = `data:image/jpeg;base64,${logoBase64}`;
+
 
 
 
@@ -28,8 +35,12 @@ router.post('/send-reply-contactProffesional', async (req, res) => {
     from: '"mispeluquerias.com" <comunicaciones@mispeluquerias.com>', // Remitente
     to, // Correo del destinatario
     subject, // Asunto del correo
+    
     text: message, // Mensaje en texto plano
     html: `
+      <div style="text-align: center;">
+        <img src="${logoUrl}" alt="Logo de Mis Peluquerías" style="width: 400px; border-radius: 4px;box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); margin-bottom: 20px;" />
+      </div>
       <p>${message}</p>
       <p>Por favor, no respondas directamente a este correo.</p>
       <p>Para responder, visita nuestra plataforma en 

@@ -15,9 +15,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const db_1 = __importDefault(require("../../db/db"));
 const body_parser_1 = __importDefault(require("body-parser"));
+const path_1 = __importDefault(require("path"));
+const fs_1 = __importDefault(require("fs"));
 const nodemailer = require('nodemailer');
 const router = express_1.default.Router();
 router.use(body_parser_1.default.json());
+const logoPath = path_1.default.join(__dirname, '../../../dist/assets/img/logo-mis-peluquerias-bk.jpg');
+const logoBase64 = fs_1.default.readFileSync(logoPath, 'base64');
+const logoUrl = `data:image/jpeg;base64,${logoBase64}`;
 const transporter = nodemailer.createTransport({
     host: 'mail.mispeluquerias.com', // Cambia esto por el host SMTP de tu proveedor
     port: 465, // Puerto SMTP seguro, usa 587 si el 465 no funciona
@@ -36,6 +41,9 @@ router.post('/send-reply-contactProffesional', (req, res) => __awaiter(void 0, v
         subject, // Asunto del correo
         text: message, // Mensaje en texto plano
         html: `
+      <div style="text-align: center;">
+        <img src="${logoUrl}" alt="Logo de Mis Peluquerías" style="width: 400px; border-radius: 4px;box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); margin-bottom: 20px;" />
+      </div>
       <p>${message}</p>
       <p>Por favor, no respondas directamente a este correo.</p>
       <p>Para responder, visita nuestra plataforma en 

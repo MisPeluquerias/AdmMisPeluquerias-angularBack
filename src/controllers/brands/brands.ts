@@ -56,6 +56,7 @@ router.get("/getAllBrands", async (req, res) => {
     LEFT JOIN brands_categories bc ON b.id_brand = bc.id_brand
     WHERE b.name LIKE ?
     GROUP BY b.id_brand
+    ORDER BY b.name
     LIMIT ?, ?;
   `;
 
@@ -196,9 +197,7 @@ router.post("/addBrand", upload.single("brandImage"), async (req, res) => {
     const brandImage = req.file;
 
     if (!name) {
-      return res
-        .status(400)
-        .json({ error: "El nombre de la marca es requerido" });
+      return res.status(400).json({ error: "El nombre de la marca es requerido" });
     }
 
     if (!brandImage) {
@@ -211,126 +210,108 @@ router.post("/addBrand", upload.single("brandImage"), async (req, res) => {
       try {
         parsedCategories = JSON.parse(categories);
       } catch (err) {
-        return res
-          .status(400)
-          .json({ error: "El formato de las categorías es incorrecto" });
+        return res.status(400).json({ error: "El formato de las categorías es incorrecto" });
       }
     } else {
       parsedCategories = categories;
     }
 
-    // Construir la URL completa basada en el servidor
-    const serverUrl = `${req.protocol}://${req.get("host")}`;
-    const imageUrl = `${serverUrl}/uploads/brands-pictures/${brandImage.filename}`;
-
-    const insertBrandQuery = `
-      INSERT INTO brands (name, imagePath, active)
-      VALUES (?, ?, ?);
-    `;
-
-    connection.beginTransaction((err) => {
+    // Consulta para verificar si la marca ya existe
+    const checkBrandQuery = "SELECT COUNT(*) AS count FROM brands WHERE name = ?";
+    connection.query(checkBrandQuery, [name], (err, result:any) => {
       if (err) {
-        console.error("Error al iniciar la transacción:", err);
-        return res
-          .status(500)
-          .json({ error: "Ocurrió un error al iniciar la transacción" });
+        console.error("Error al verificar si la marca existe:", err);
+        return res.status(500).json({ error: "Ocurrió un error al verificar el nombre de la marca" });
+      }
+      if (result[0].count > 0) {
+        return res.status(400).json({ error: "El nombre de la marca ya existe" });
       }
 
-      // Insertar la marca
-      connection.query<ResultSetHeader>(
-        insertBrandQuery,
-        [name, imageUrl, 1], // El valor de "active" es 1 por defecto
-        (error, results) => {
-          if (error) {
-            console.error("Error al insertar los datos:", error);
-            return connection.rollback(() => {
-              res
-                .status(500)
-                .json({ error: "Ocurrió un error al insertar los datos" });
-            });
-          }
+      // Construir la URL completa basada en el servidor
+      const serverUrl = `${req.protocol}://${req.get("host")}`;
+      const imageUrl = `${serverUrl}/uploads/brands-pictures/${brandImage.filename}`;
 
-          const brandId = results.insertId; // Obtener el ID de la marca insertada
+      const insertBrandQuery = `
+        INSERT INTO brands (name, imagePath, active)
+        VALUES (?, ?, ?);
+      `;
 
-          // Si no hay categorías, continuar con el commit
-          if (!parsedCategories || parsedCategories.length === 0) {
-            return connection.commit((commitError) => {
-              if (commitError) {
-                console.error(
-                  "Error al confirmar la transacción:",
-                  commitError
-                );
-                return connection.rollback(() => {
-                  res
-                    .status(500)
-                    .json({
-                      error: "Ocurrió un error al confirmar la transacción",
-                    });
-                });
-              }
-              res.status(201).json({ message: "Marca añadida exitosamente" });
-            });
-          }
+      connection.beginTransaction((err) => {
+        if (err) {
+          console.error("Error al iniciar la transacción:", err);
+          return res.status(500).json({ error: "Ocurrió un error al iniciar la transacción" });
+        }
 
-          // Insertar las categorías asociadas
-          const insertCategoriesQuery = `
-            INSERT INTO brands_categories (id_brand, category)
-            VALUES ?
-          `;
+        // Insertar la marca
+        connection.query<ResultSetHeader>(
+          insertBrandQuery,
+          [name, imageUrl, 1], // El valor de "active" es 1 por defecto
+          (error, results) => {
+            if (error) {
+              console.error("Error al insertar los datos:", error);
+              return connection.rollback(() => {
+                res.status(500).json({ error: "Ocurrió un error al insertar los datos" });
+              });
+            }
 
-          // Preparar los valores a insertar
-          const categoryValues = parsedCategories.map((category: any) => [
-            brandId,
-            category,
-          ]);
+            const brandId = results.insertId; // Obtener el ID de la marca insertada
 
-          connection.query(
-            insertCategoriesQuery,
-            [categoryValues],
-            (catError, catResults) => {
-              if (catError) {
-                console.error("Error al insertar las categorías:", catError);
-                return connection.rollback(() => {
-                  res
-                    .status(500)
-                    .json({
-                      error: "Ocurrió un error al insertar las categorías",
-                    });
-                });
-              }
-
-              // Confirmar la transacción si todo fue exitoso
-              connection.commit((commitError) => {
+            // Si no hay categorías, continuar con el commit
+            if (!parsedCategories || parsedCategories.length === 0) {
+              return connection.commit((commitError) => {
                 if (commitError) {
-                  console.error(
-                    "Error al confirmar la transacción:",
-                    commitError
-                  );
+                  console.error("Error al confirmar la transacción:", commitError);
                   return connection.rollback(() => {
-                    res
-                      .status(500)
-                      .json({
-                        error: "Ocurrió un error al confirmar la transacción",
-                      });
+                    res.status(500).json({ error: "Ocurrió un error al confirmar la transacción" });
+                  });
+                }
+                res.status(201).json({ message: "Marca añadida exitosamente" });
+              });
+            }
+
+            // Insertar las categorías asociadas
+            const insertCategoriesQuery = `
+              INSERT INTO brands_categories (id_brand, category)
+              VALUES ?
+            `;
+
+            // Preparar los valores a insertar
+            const categoryValues = parsedCategories.map((category:any) => [brandId, category]);
+
+            connection.query(
+              insertCategoriesQuery,
+              [categoryValues],
+              (catError) => {
+                if (catError) {
+                  console.error("Error al insertar las categorías:", catError);
+                  return connection.rollback(() => {
+                    res.status(500).json({ error: "Ocurrió un error al insertar las categorías" });
                   });
                 }
 
-                res
-                  .status(201)
-                  .json({
-                    message: "Marca y categorías añadidas exitosamente",
-                  });
-              });
-            }
-          );
-        }
-      );
+                // Confirmar la transacción si todo fue exitoso
+                connection.commit((commitError) => {
+                  if (commitError) {
+                    console.error("Error al confirmar la transacción:", commitError);
+                    return connection.rollback(() => {
+                      res.status(500).json({ error: "Ocurrió un error al confirmar la transacción" });
+                    });
+                  }
+
+                  res.status(201).json({ message: "Marca y categorías añadidas exitosamente" });
+                });
+              }
+            );
+          }
+        );
+      });
     });
   } catch (err) {
     console.error("Error inesperado:", err);
     res.status(500).json({ error: "Ocurrió un error inesperado" });
   }
 });
+
 
 
 

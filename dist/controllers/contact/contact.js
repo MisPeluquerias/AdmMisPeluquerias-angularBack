@@ -15,8 +15,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const db_1 = __importDefault(require("../../db/db"));
 const body_parser_1 = __importDefault(require("body-parser"));
+const path_1 = __importDefault(require("path"));
+const fs_1 = __importDefault(require("fs"));
 const router = express_1.default.Router();
 router.use(body_parser_1.default.json());
+const logoPath = path_1.default.join(__dirname, '../../../dist/assets/img/logo-mis-peluquerias-bk.jpg');
+const logoBase64 = fs_1.default.readFileSync(logoPath, 'base64');
+const logoUrl = `data:image/jpeg;base64,${logoBase64}`;
 router.get('/getAllMessageContact', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const page = parseInt(req.query.page || '1', 10);
     const pageSize = parseInt(req.query.pageSize || '10', 10);
@@ -111,6 +116,9 @@ router.post('/send-reply-contact', (req, res) => __awaiter(void 0, void 0, void 
         subject, // Asunto del correo
         text: message, // Mensaje en texto plano
         html: `
+    <div style="text-align: center;">
+        <img src="${logoUrl}" alt="Logo de Mis Peluquerías" style="width: 400px; border-radius: 4px;box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); margin-bottom: 20px;" />
+      </div>
       <p>${message}</p>
       <p>Por favor, no respondas directamente a este correo.</p>
       <p>Para responder, visita nuestra plataforma en 

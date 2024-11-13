@@ -586,7 +586,7 @@ router.get("/getBrandsBySalon", (req, res) => {
       SELECT bs.id_brand_salon, bs.id_salon, bs.id_brand, b.name, b.imagePath 
       FROM brands_salon bs
       INNER JOIN brands b ON bs.id_brand = b.id_brand
-      WHERE bs.id_salon = ?`;
+      WHERE bs.id_salon = ? ORDER BY b.name`;
         db_1.default.query(query, [id_salon], (err, results) => {
             if (err) {
                 console.error("Error fetching brands:", err);

@@ -29,6 +29,10 @@ import Brands from './controllers/brands/brands';
 import categoriesJobs from './controllers/categories-jobs/categories-jobs';
 import notifications from './controllers/notifications/notifications';
 import imgJobs from './controllers/img-jobs/img-jobs';
+import jobsOffer from './controllers/job-offer/job-offer';
+
+
+
 
 const app = express();
 app.use(express.json());
@@ -72,6 +76,7 @@ app.use('/brands',Brands);
 app.use('/categories-jobs',categoriesJobs);
 app.use('/notifications',notifications);
 app.use('/img-jobs',imgJobs);
+app.use('/job-offer',jobsOffer);
  
 
 
