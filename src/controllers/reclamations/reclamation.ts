@@ -370,9 +370,6 @@ router.put("/updateStateReclamation", async (req, res) => {
             to: email,
             subject: "Reclamación Reclamada",
             html: `
-              <div style="text-align: center;">
-                <img src="${logoUrl}" alt="Logo de Mis Peluquerías" style="width: 400px; border-radius: 4px;box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); margin-bottom: 20px;" />
-              </div>
               <p>¡Enhorabuena! Tu reclamación ha sido registrada exitosamente para el salón ${salon_name}.</p>
               <p>Para administrar tu establecimiento, visita la plataforma 
                 <a href="https://adm.mispeluquerias.com/login" target="_blank" style="color: #007bff; text-decoration: underline;">
@@ -380,6 +377,10 @@ router.put("/updateStateReclamation", async (req, res) => {
                 </a> introduciendo sus credenciales de usuario.
               </p>
               <p>Por favor, no respondas a este correo.</p>
+              <p>Atentamente el equipo de soporte de mispeluquerias.com</p>
+              <div style="text-align: center;">
+                <img src="${logoUrl}" alt="Logo de Mis Peluquerías" style="width: 400px; border-radius: 4px;box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); margin-bottom: 20px;" />
+              </div>
             `,
           };
 

@@ -1995,20 +1995,18 @@ router.delete("/deleteBrandById", async (req, res) => {
 router.get("/getBrandsByCategory", (req, res) => {
   const { category, term } = req.query; // Tomamos también el término de búsqueda
 
-  //console.log("Categoría recibida:", category, "Término de búsqueda:", term);
-
   if (!category) {
     return res.status(400).json({ error: "El nombre de la categoría es requerido" });
   }
 
   // Construimos la consulta SQL para filtrar por categoría y, opcionalmente, por el término de búsqueda
   let query = `
-  SELECT brands.id_brand, brands.name, bs.id_brand_salon
-  FROM brands_categories
-  JOIN brands ON brands_categories.id_brand = brands.id_brand
-  LEFT JOIN brands_salon bs ON bs.id_brand = brands.id_brand
-  WHERE brands_categories.category = ?
-`;
+    SELECT brands.id_brand, brands.name, brands.imagePath, MIN(bs.id_brand_salon) as id_brand_salon
+    FROM brands_categories
+    JOIN brands ON brands_categories.id_brand = brands.id_brand
+    LEFT JOIN brands_salon bs ON bs.id_brand = brands.id_brand
+    WHERE brands_categories.category = ?
+  `;
 
   const queryParams = [category];
 
@@ -2018,6 +2016,8 @@ router.get("/getBrandsByCategory", (req, res) => {
     queryParams.push(`%${term}%`);
   }
 
+  query += " GROUP BY brands.id_brand, brands.name, brands.imagePath";
+
   connection.query(query, queryParams, (error, results) => {
     if (error) {
       console.error("Error al obtener las marcas:", error);
@@ -2025,9 +2025,9 @@ router.get("/getBrandsByCategory", (req, res) => {
     }
 
     res.json(results);
-    //console.log("Resultados:", results);
   });
 });
+
 
 
 

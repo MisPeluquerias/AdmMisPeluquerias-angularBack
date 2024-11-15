@@ -32,9 +32,6 @@ router.get('/getAllSalon', async (req: Request, res: Response) => {
   const permisoToken = req.query.permiso as string;
   const usuarioIdToken = req.query.usuarioId as string;
 
-  //console.log('Permiso sin decodificar:', permisoToken);
-  //console.log('UsuarioId sin decodificar:', usuarioIdToken);
-
   let decodedPermiso: any = null;
   let decodedUsuarioId: any = null;
 
@@ -42,24 +39,14 @@ router.get('/getAllSalon', async (req: Request, res: Response) => {
     decodedPermiso = decodeTokenPermiso(permisoToken);
     decodedUsuarioId = decodeTokenPermiso(usuarioIdToken);
 
-    //console.log('Token decodificado (permiso):', decodedPermiso);
-    //console.log('Token decodificado (usuarioId):', decodedUsuarioId);
-
     if (!decodedPermiso || !decodedPermiso.permiso) {
-      console.error('El token decodificado no contiene el permiso.');
       return res.status(400).json({ message: 'Token de permiso inválido' });
     }
 
     if (!decodedUsuarioId || !decodedUsuarioId.usuarioId) {
-      console.error('El token decodificado no contiene el usuarioId.');
       return res.status(400).json({ message: 'Token de usuarioId inválido' });
     }
-
-    //console.log('Permiso decodificado:', decodedPermiso.permiso);
-    //console.log('UsuarioId decodificado:', decodedUsuarioId.usuarioId);
-
   } else {
-    console.error('Permiso o UsuarioId no son válidos');
     return res.status(400).json({ message: 'Permiso o UsuarioId inválidos' });
   }
 
@@ -71,15 +58,15 @@ router.get('/getAllSalon', async (req: Request, res: Response) => {
     SELECT SQL_CALC_FOUND_ROWS * 
     FROM salon 
     WHERE (name LIKE ? OR email LIKE ? OR phone LIKE ? OR state LIKE ?)
-  `;
+    `;
     queryParams.push(search, search, search, search);
   } else {
     query = `
-    SELECT s.*
+    SELECT s.* 
     FROM salon s
     JOIN user_salon us ON s.id_salon = us.id_salon
     WHERE us.id_user = ? AND (s.name LIKE ? OR s.email LIKE ? OR s.phone LIKE ? OR s.state LIKE ?)
-  `;
+    `;
     queryParams.push(decodedUsuarioId.usuarioId, search, search, search, search);
   }
 
@@ -96,25 +83,50 @@ router.get('/getAllSalon', async (req: Request, res: Response) => {
   query += ' LIMIT ?, ?';
   queryParams.push(offset, pageSize);
 
-  connection.query(query, queryParams, (error, results) => {
-    if (error) {
-      console.error('Error fetching data:', error);
-      res.status(500).json({ error: 'An error occurred while fetching data' });
-      return;
+  // Inicio de la transacción
+  connection.beginTransaction((transactionError) => {
+    if (transactionError) {
+      console.error('Error starting transaction:', transactionError);
+      return res.status(500).json({ error: 'Error starting transaction' });
     }
 
-    connection.query('SELECT FOUND_ROWS() as totalItems', (countError, countResults) => {
-      if (countError) {
-        console.error('Error fetching count:', countError);
-        res.status(500).json({ error: 'An error occurred while fetching data count' });
-        return;
+    // Ejecución de la primera consulta
+    connection.query(query, queryParams, (queryError, results) => {
+      if (queryError) {
+        console.error('Error executing query:', queryError);
+        return connection.rollback(() => {
+          res.status(500).json({ error: 'Error fetching data' });
+        });
       }
 
-      const totalItems = (countResults as RowDataPacket[])[0]?.totalItems;
-      res.json({ data: results, totalItems });
+      // Ejecución de la segunda consulta dentro de la transacción
+      connection.query('SELECT FOUND_ROWS() as totalItems', (countError, countResults) => {
+        if (countError) {
+          console.error('Error fetching count:', countError);
+          return connection.rollback(() => {
+            res.status(500).json({ error: 'Error fetching data count' });
+          });
+        }
+
+        const totalItems = (countResults as RowDataPacket[])[0]?.totalItems;
+
+        // Confirmar la transacción
+        connection.commit((commitError) => {
+          if (commitError) {
+            console.error('Error committing transaction:', commitError);
+            return connection.rollback(() => {
+              res.status(500).json({ error: 'Error committing transaction' });
+            });
+          }
+
+          // Enviar la respuesta final
+          res.json({ data: results, totalItems });
+        });
+      });
     });
   });
 });
+
 
 router.post('/deleteBusiness', (req, res) => {
   const { ids } = req.body;

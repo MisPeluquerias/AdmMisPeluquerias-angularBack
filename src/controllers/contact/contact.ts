@@ -124,9 +124,6 @@ router.post('/send-reply-contact', async (req, res) => {
     subject, // Asunto del correo
     text: message, // Mensaje en texto plano
     html: `
-    <div style="text-align: center;">
-        <img src="${logoUrl}" alt="Logo de Mis Peluquerías" style="width: 400px; border-radius: 4px;box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); margin-bottom: 20px;" />
-      </div>
       <p>${message}</p>
       <p>Por favor, no respondas directamente a este correo.</p>
       <p>Para responder, visita nuestra plataforma en 
@@ -134,6 +131,10 @@ router.post('/send-reply-contact', async (req, res) => {
           www.mispeluquerias.com/contacto
         </a>.
       </p>
+      <p>Atentamente el equipo de soporte de mispeluquerias.com</p>
+      <div style="text-align: center;">
+        <img src="${logoUrl}" alt="Logo de Mis Peluquerías" style="width: 400px; border-radius: 4px;box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); margin-bottom: 20px;" />
+      </div>
     `,
   }; 
 
@@ -178,6 +179,10 @@ router.post('/send-new-email-contact', async (req, res) => {
           www.mispeluquerias.com/profesionales
         </a>.
       </p>
+      <p>Atentamente el equipo de soporte de mispeluquerias.com</p>
+      <div style="text-align: center;">
+        <img src="${logoUrl}" alt="Logo de Mis Peluquerías" style="width: 400px; border-radius: 4px;box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); margin-bottom: 20px;" />
+      </div>
     `,
   };
 

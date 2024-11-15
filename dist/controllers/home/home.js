@@ -39,28 +39,19 @@ router.get('/getAllSalon', (req, res) => __awaiter(void 0, void 0, void 0, funct
     const filterActive = req.query.filterActive === 'true' ? '1' : '0';
     const permisoToken = req.query.permiso;
     const usuarioIdToken = req.query.usuarioId;
-    //console.log('Permiso sin decodificar:', permisoToken);
-    //console.log('UsuarioId sin decodificar:', usuarioIdToken);
     let decodedPermiso = null;
     let decodedUsuarioId = null;
     if (typeof permisoToken === 'string' && typeof usuarioIdToken === 'string') {
         decodedPermiso = decodeTokenPermiso(permisoToken);
         decodedUsuarioId = decodeTokenPermiso(usuarioIdToken);
-        //console.log('Token decodificado (permiso):', decodedPermiso);
-        //console.log('Token decodificado (usuarioId):', decodedUsuarioId);
         if (!decodedPermiso || !decodedPermiso.permiso) {
-            console.error('El token decodificado no contiene el permiso.');
             return res.status(400).json({ message: 'Token de permiso inválido' });
         }
         if (!decodedUsuarioId || !decodedUsuarioId.usuarioId) {
-            console.error('El token decodificado no contiene el usuarioId.');
             return res.status(400).json({ message: 'Token de usuarioId inválido' });
         }
-        //console.log('Permiso decodificado:', decodedPermiso.permiso);
-        //console.log('UsuarioId decodificado:', decodedUsuarioId.usuarioId);
     }
     else {
-        console.error('Permiso o UsuarioId no son válidos');
         return res.status(400).json({ message: 'Permiso o UsuarioId inválidos' });
     }
     let query;
@@ -70,16 +61,16 @@ router.get('/getAllSalon', (req, res) => __awaiter(void 0, void 0, void 0, funct
     SELECT SQL_CALC_FOUND_ROWS * 
     FROM salon 
     WHERE (name LIKE ? OR email LIKE ? OR phone LIKE ? OR state LIKE ?)
-  `;
+    `;
         queryParams.push(search, search, search, search);
     }
     else {
         query = `
-    SELECT s.*
+    SELECT s.* 
     FROM salon s
     JOIN user_salon us ON s.id_salon = us.id_salon
     WHERE us.id_user = ? AND (s.name LIKE ? OR s.email LIKE ? OR s.phone LIKE ? OR s.state LIKE ?)
-  `;
+    `;
         queryParams.push(decodedUsuarioId.usuarioId, search, search, search, search);
     }
     if (filterActive) {
@@ -92,21 +83,42 @@ router.get('/getAllSalon', (req, res) => __awaiter(void 0, void 0, void 0, funct
     }
     query += ' LIMIT ?, ?';
     queryParams.push(offset, pageSize);
-    db_1.default.query(query, queryParams, (error, results) => {
-        if (error) {
-            console.error('Error fetching data:', error);
-            res.status(500).json({ error: 'An error occurred while fetching data' });
-            return;
+    // Inicio de la transacción
+    db_1.default.beginTransaction((transactionError) => {
+        if (transactionError) {
+            console.error('Error starting transaction:', transactionError);
+            return res.status(500).json({ error: 'Error starting transaction' });
         }
-        db_1.default.query('SELECT FOUND_ROWS() as totalItems', (countError, countResults) => {
-            var _a;
-            if (countError) {
-                console.error('Error fetching count:', countError);
-                res.status(500).json({ error: 'An error occurred while fetching data count' });
-                return;
+        // Ejecución de la primera consulta
+        db_1.default.query(query, queryParams, (queryError, results) => {
+            if (queryError) {
+                console.error('Error executing query:', queryError);
+                return db_1.default.rollback(() => {
+                    res.status(500).json({ error: 'Error fetching data' });
+                });
             }
-            const totalItems = (_a = countResults[0]) === null || _a === void 0 ? void 0 : _a.totalItems;
-            res.json({ data: results, totalItems });
+            // Ejecución de la segunda consulta dentro de la transacción
+            db_1.default.query('SELECT FOUND_ROWS() as totalItems', (countError, countResults) => {
+                var _a;
+                if (countError) {
+                    console.error('Error fetching count:', countError);
+                    return db_1.default.rollback(() => {
+                        res.status(500).json({ error: 'Error fetching data count' });
+                    });
+                }
+                const totalItems = (_a = countResults[0]) === null || _a === void 0 ? void 0 : _a.totalItems;
+                // Confirmar la transacción
+                db_1.default.commit((commitError) => {
+                    if (commitError) {
+                        console.error('Error committing transaction:', commitError);
+                        return db_1.default.rollback(() => {
+                            res.status(500).json({ error: 'Error committing transaction' });
+                        });
+                    }
+                    // Enviar la respuesta final
+                    res.json({ data: results, totalItems });
+                });
+            });
         });
     });
 }));

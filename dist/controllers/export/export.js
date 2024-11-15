@@ -163,7 +163,7 @@ GROUP BY
                         type: "list",
                         allowBlank: false,
                         formulae: [
-                            '"Barbería,Peluquería,Estética,Academia,Manicura y Pedicura,Depilación Láser"',
+                            '"Barbería,Peluquería,Centro de Estética,Academia,Manicura y Pedicura,Depilación Láser"',
                         ],
                         showErrorMessage: true,
                         errorTitle: "Entrada no válida",
