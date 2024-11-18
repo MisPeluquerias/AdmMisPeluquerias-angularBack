@@ -232,4 +232,43 @@ router.get('/getSalonsByUser/:id_user', (req, res) => {
         });
     });
 });
+router.delete('/deleteJobOffer/:id_job_offer', (req, res) => {
+    const { id_job_offer } = req.params;
+    // Validar el ID
+    if (!id_job_offer || isNaN(Number(id_job_offer))) {
+        return res.status(400).json({ message: 'ID de la oferta no válido.' });
+    }
+    db_1.default.beginTransaction((err) => {
+        if (err) {
+            console.error('Error al iniciar la transacción:', err);
+            return res.status(500).json({ message: 'Error interno del servidor.' });
+        }
+        const deleteOfferQuery = 'DELETE FROM jobs_offers WHERE id_job_offer = ?';
+        // Cambiamos el tipo del resultado a ResultSetHeader
+        db_1.default.query(deleteOfferQuery, [id_job_offer], (queryErr, result) => {
+            if (queryErr) {
+                console.error('Error al eliminar la oferta de empleo:', queryErr);
+                return db_1.default.rollback(() => {
+                    res.status(500).json({ message: 'Error interno del servidor.' });
+                });
+            }
+            // Verificar si se eliminó alguna fila
+            if (result.affectedRows === 0) {
+                return db_1.default.rollback(() => {
+                    res.status(404).json({ message: 'Oferta de empleo no encontrada.' });
+                });
+            }
+            // Confirmar la transacción
+            db_1.default.commit((commitErr) => {
+                if (commitErr) {
+                    console.error('Error al confirmar la transacción:', commitErr);
+                    return db_1.default.rollback(() => {
+                        res.status(500).json({ message: 'Error interno del servidor.' });
+                    });
+                }
+                return res.status(200).json({ message: 'Oferta de empleo eliminada con éxito.' });
+            });
+        });
+    });
+});
 exports.default = router;
