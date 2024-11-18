@@ -58,11 +58,10 @@ router.get('/getAllServices', async (req, res) => {
 router.post('/addService', async (req, res) => {
   const { name, subservices, categories } = req.body;
 
-  console.log('Categorias recibidas:', categories);
-
-  console.log('Categorías recibidas:', categories);  // Depuración para ver qué datos llegan
+  console.log('Request Body:', req.body); // Registro completo para depuración
 
   if (!name || !Array.isArray(subservices) || subservices.length === 0) {
+    console.error('Validation Error: Missing required fields');
     return res.status(400).json({ error: 'Nombre del servicio y subservicios son necesarios' });
   }
 
@@ -73,27 +72,30 @@ router.post('/addService', async (req, res) => {
   try {
     connection.beginTransaction((transactionError) => {
       if (transactionError) {
-        console.error('Error starting transaction:', transactionError);
+        console.error('Transaction Error:', transactionError);
         return res.status(500).json({ error: 'Transaction failed' });
       }
 
-      // Insertar el servicio y obtener el `insertId`
-      connection.query<ResultSetHeader>(queryService, [name], (error, result) => {
+      // Insertar el servicio
+      connection.query<ResultSetHeader>(queryService, [name], (error:any, result) => {
         if (error) {
           connection.rollback(() => {
             console.error('Error inserting service:', error);
-            return res.status(500).json({ error: 'Error inserting service' });
+            return res.status(500).json({ error: 'Error inserting service', details: error.message });
           });
           return;
         }
 
         const serviceId = result.insertId;
+        console.log('Service ID:', serviceId);
 
         // Insertar los subservicios
         const subservicePromises = subservices.map((subservice) => {
+          console.log('Inserting subservice:', subservice);
           return new Promise((resolve, reject) => {
             connection.query(querySubservice, [serviceId, subservice], (subError, subResult) => {
               if (subError) {
+                console.error('Error inserting subservice:', subError);
                 return reject(subError);
               }
               resolve(subResult);
@@ -102,17 +104,15 @@ router.post('/addService', async (req, res) => {
         });
 
         // Insertar las categorías asociadas
-        const categoryPromises = categories.map((category: any) => {
-          console.log('Insertando categoría:', category.name);  // Ahora imprimimos solo el nombre de la categoría
+        const categoryPromises = categories.map((category:any) => {
+          console.log('Inserting category:', category.name); // Registro mejorado
           return new Promise((resolve, reject) => {
-            // Insertamos el valor de `category.name` en lugar del objeto completo
             connection.query(queryCategory, [serviceId, category.name], (catError, catResult) => {
               if (catError) {
+                console.error('Error inserting category:', catError);
                 return reject(catError);
               }
               resolve(catResult);
-              console.log('Insertando categoría:', category.name);  // Ahora se verá solo el nombre
-
             });
           });
         });
@@ -123,10 +123,11 @@ router.post('/addService', async (req, res) => {
             connection.commit((commitError) => {
               if (commitError) {
                 connection.rollback(() => {
-                  console.error('Error committing transaction:', commitError);
-                  res.status(500).json({ error: 'Error committing transaction' });
+                  console.error('Commit Error:', commitError);
+                  res.status(500).json({ error: 'Error committing transaction', details: commitError.message });
                 });
               } else {
+                console.log('Transaction committed successfully');
                 res.status(201).json({ message: 'Servicio, subservicios y categorías creados con éxito' });
               }
             });
@@ -134,16 +135,20 @@ router.post('/addService', async (req, res) => {
           .catch((insertError) => {
             connection.rollback(() => {
               console.error('Error inserting subservices or categories:', insertError);
-              res.status(500).json({ error: 'Error inserting subservices or categories' });
+              res.status(500).json({
+                error: 'Error inserting subservices or categories',
+                details: insertError.message,
+              });
             });
           });
       });
     });
-  } catch (error) {
-    console.error('Error creando servicio, subservicios y categorías:', error);
-    res.status(500).json({ error: 'Error creando servicio, subservicios y categorías' });
+  } catch (error:any) {
+    console.error('Unexpected Error:', error);
+    res.status(500).json({ error: 'Error creando servicio, subservicios y categorías', details: error.message });
   }
 });
+
 
 
 
