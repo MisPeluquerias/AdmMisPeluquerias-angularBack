@@ -18,7 +18,7 @@ const storage = multer_1.default.diskStorage({
     filename: (req, file, cb) => {
         // Generar un nombre de archivo único con un prefijo y marca de tiempo
         const uniqueSuffix = Date.now() + path_1.default.extname(file.originalname);
-        cb(null, `brand-${uniqueSuffix}`);
+        cb(null, `imgJobs-${uniqueSuffix}`);
     },
 });
 const upload = (0, multer_1.default)({
@@ -94,7 +94,7 @@ router.post("/addImgJobs", upload.single("imgJobs"), (req, res) => {
     }
     const serverUrl = `${req.protocol}://${req.get("host")}`;
     const imageUrl = `${serverUrl}/uploads/jobs-pictures/${imgJobs.filename}`;
-    const insertBrandQuery = `
+    const insertJobImgQuery = `
     INSERT INTO jobs_img (path)
     VALUES (?);
   `;
@@ -103,7 +103,7 @@ router.post("/addImgJobs", upload.single("imgJobs"), (req, res) => {
             console.error("Error al iniciar la transacción:", err);
             return res.status(500).json({ error: "Ocurrió un error al iniciar la transacción" });
         }
-        db_1.default.query(insertBrandQuery, [imageUrl], (error, results) => {
+        db_1.default.query(insertJobImgQuery, [imageUrl], (error, results) => {
             if (error) {
                 console.error("Error al insertar los datos:", error);
                 return db_1.default.rollback(() => {

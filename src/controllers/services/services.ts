@@ -151,12 +151,6 @@ router.post('/addService', async (req, res) => {
 
 
 
-
-
-
-
-
-
 router.get("/searchCategoryInLive", async (req, res) => {
   try {
     const { category } = req.query;

@@ -18,7 +18,7 @@ const storage = multer.diskStorage({
     filename: (req, file, cb) => {
       // Generar un nombre de archivo único con un prefijo y marca de tiempo
       const uniqueSuffix = Date.now() + path.extname(file.originalname);
-      cb(null, `brand-${uniqueSuffix}`);
+      cb(null, `imgJobs-${uniqueSuffix}`);
     },
   });
 
@@ -114,7 +114,7 @@ const storage = multer.diskStorage({
   const serverUrl = `${req.protocol}://${req.get("host")}`;
   const imageUrl = `${serverUrl}/uploads/jobs-pictures/${imgJobs.filename}`;
 
-  const insertBrandQuery = `
+  const insertJobImgQuery = `
     INSERT INTO jobs_img (path)
     VALUES (?);
   `;
@@ -126,7 +126,7 @@ const storage = multer.diskStorage({
     }
 
     connection.query<ResultSetHeader>(
-      insertBrandQuery,
+      insertJobImgQuery,
       [imageUrl],
       (error, results) => {
         if (error) {
@@ -154,6 +154,8 @@ const storage = multer.diskStorage({
     );
   });
 });
+
+
 
 
 router.delete('/deleteImgJob/:id_jobs_img', (req, res) => {
