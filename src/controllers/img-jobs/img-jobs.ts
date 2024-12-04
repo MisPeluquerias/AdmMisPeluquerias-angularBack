@@ -162,9 +162,6 @@ router.delete('/deleteImgJob/:id_jobs_img', (req, res) => {
   const imageId = req.params.id_jobs_img;
   //console.log(`Received request to delete image with ID: ${imageId}`);
 
-
-
-
   // Consultar la base de datos para obtener la URL del archivo
   const query = 'SELECT path FROM jobs_img WHERE id_jobs_img = ?';
   connection.query(query, [imageId], (err, results:any) => {
