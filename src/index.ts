@@ -32,8 +32,6 @@ import imgJobs from './controllers/img-jobs/img-jobs';
 import jobsOffer from './controllers/job-offer/job-offer';
 
 
-
-
 const app = express();
 app.use(express.json());
 app.use(cors());

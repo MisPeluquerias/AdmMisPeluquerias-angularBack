@@ -121,55 +121,70 @@ router.get('/getAllMessageContactProffesional', async (req, res) => {
   const pageSize = parseInt(req.query.pageSize as string || '10', 10);
   const offset = (page - 1) * pageSize;
   const search = req.query.search ? `%${req.query.search}%` : '%%';
-  const filterState = req.query.filterState ? req.query.filterState.toString() : '%%';
+  const filterState = req.query.filterState || null;
 
-  // Inicializa la consulta base y los parámetros de la consulta
-  let query = `
-    SELECT 
-        SQL_CALC_FOUND_ROWS cp.*, 
-        c.name AS city_name, 
-        p.name AS province_name
-    FROM 
-        contact_proffesional cp
-    LEFT JOIN 
-        city c ON cp.id_city = c.id_city
-    LEFT JOIN 
-        province p ON cp.id_province = p.id_province
-    WHERE 
-        (cp.name LIKE ? OR cp.email LIKE ? OR cp.phone LIKE ? OR cp.text LIKE ?) ORDER BY email
-  `;
-  const queryParams: any[] = [search, search, search, search];
-
-  // Aplica los filtros si están presentes
- 
-  if (filterState && filterState !== '%%') {
-    query += ' AND state = ?';
-    queryParams.push(filterState);
-  }
-
-  // Añade los límites de paginación
-  query += ' LIMIT ?, ?';
-  queryParams.push(offset, pageSize);
-
-  // Ejecuta la consulta principal
-  connection.query(query, queryParams, (error, results) => {
-    if (error) {
-      console.error('Error fetching data:', error);
-      res.status(500).json({ error: 'An error occurred while fetching data' });
+  // Inicializa la conexión
+  connection.beginTransaction(async (err) => {
+    if (err) {
+      console.error('Error starting transaction:', err);
+      res.status(500).json({ error: 'An error occurred while starting the transaction' });
       return;
     }
 
-    // Ejecuta la consulta para contar los elementos totales
-    connection.query('SELECT FOUND_ROWS() AS totalItems', (countError, countResults) => {
-      if (countError) {
-        console.error('Error fetching count:', countError);
-        res.status(500).json({ error: 'An error occurred while fetching data count' });
-        return;
+    try {
+      // Consulta principal con parámetros
+      let query = `
+        SELECT 
+            SQL_CALC_FOUND_ROWS cp.*, 
+            c.name AS city_name, 
+            p.name AS province_name
+        FROM 
+            contact_proffesional cp
+        LEFT JOIN 
+            city c ON cp.id_city = c.id_city
+        LEFT JOIN 
+            province p ON cp.id_province = p.id_province
+        WHERE 
+            (cp.name LIKE ? OR cp.email LIKE ? OR cp.phone LIKE ? OR cp.text LIKE ?)
+      `;
+      const queryParams: any[] = [search, search, search, search];
+
+      // Aplica los filtros si están presentes
+      if (filterState) {
+        query += ' AND cp.state = ?';
+        queryParams.push(filterState);
       }
 
-      const totalItems = (countResults as RowDataPacket[])[0]?.totalItems;
-      res.json({ data: results, totalItems });
-    });
+      // Añade los límites de paginación
+      query += ' ORDER BY cp.email LIMIT ?, ?';
+      queryParams.push(offset, pageSize);
+
+      // Ejecuta la consulta principal
+      const [results] = await connection.promise().query(query, queryParams);
+
+      // Ejecuta la consulta para contar los elementos totales
+      const [countResults] = await connection.promise().query('SELECT FOUND_ROWS() AS totalItems');
+
+      const totalItems = (countResults as RowDataPacket[])[0]?.totalItems || 0;
+
+      // Confirma la transacción
+      connection.commit((commitErr) => {
+        if (commitErr) {
+          console.error('Error committing transaction:', commitErr);
+          res.status(500).json({ error: 'An error occurred while committing the transaction' });
+          return;
+        }
+
+        // Responde con los datos
+        res.json({ data: results, totalItems });
+      });
+    } catch (error) {
+      // Deshacer la transacción en caso de error
+      connection.rollback(() => {
+        console.error('Error during transaction:', error);
+        res.status(500).json({ error: 'An error occurred during the transaction' });
+      });
+    }
   });
 });
 

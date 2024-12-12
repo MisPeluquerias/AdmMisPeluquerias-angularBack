@@ -114,50 +114,64 @@ router.get('/getAllMessageContactProffesional', (req, res) => __awaiter(void 0, 
     const pageSize = parseInt(req.query.pageSize || '10', 10);
     const offset = (page - 1) * pageSize;
     const search = req.query.search ? `%${req.query.search}%` : '%%';
-    const filterState = req.query.filterState ? req.query.filterState.toString() : '%%';
-    // Inicializa la consulta base y los parámetros de la consulta
-    let query = `
-    SELECT 
-        SQL_CALC_FOUND_ROWS cp.*, 
-        c.name AS city_name, 
-        p.name AS province_name
-    FROM 
-        contact_proffesional cp
-    LEFT JOIN 
-        city c ON cp.id_city = c.id_city
-    LEFT JOIN 
-        province p ON cp.id_province = p.id_province
-    WHERE 
-        (cp.name LIKE ? OR cp.email LIKE ? OR cp.phone LIKE ? OR cp.text LIKE ?) ORDER BY email
-  `;
-    const queryParams = [search, search, search, search];
-    // Aplica los filtros si están presentes
-    if (filterState && filterState !== '%%') {
-        query += ' AND state = ?';
-        queryParams.push(filterState);
-    }
-    // Añade los límites de paginación
-    query += ' LIMIT ?, ?';
-    queryParams.push(offset, pageSize);
-    // Ejecuta la consulta principal
-    db_1.default.query(query, queryParams, (error, results) => {
-        if (error) {
-            console.error('Error fetching data:', error);
-            res.status(500).json({ error: 'An error occurred while fetching data' });
+    const filterState = req.query.filterState || null;
+    // Inicializa la conexión
+    db_1.default.beginTransaction((err) => __awaiter(void 0, void 0, void 0, function* () {
+        var _a;
+        if (err) {
+            console.error('Error starting transaction:', err);
+            res.status(500).json({ error: 'An error occurred while starting the transaction' });
             return;
         }
-        // Ejecuta la consulta para contar los elementos totales
-        db_1.default.query('SELECT FOUND_ROWS() AS totalItems', (countError, countResults) => {
-            var _a;
-            if (countError) {
-                console.error('Error fetching count:', countError);
-                res.status(500).json({ error: 'An error occurred while fetching data count' });
-                return;
+        try {
+            // Consulta principal con parámetros
+            let query = `
+        SELECT 
+            SQL_CALC_FOUND_ROWS cp.*, 
+            c.name AS city_name, 
+            p.name AS province_name
+        FROM 
+            contact_proffesional cp
+        LEFT JOIN 
+            city c ON cp.id_city = c.id_city
+        LEFT JOIN 
+            province p ON cp.id_province = p.id_province
+        WHERE 
+            (cp.name LIKE ? OR cp.email LIKE ? OR cp.phone LIKE ? OR cp.text LIKE ?)
+      `;
+            const queryParams = [search, search, search, search];
+            // Aplica los filtros si están presentes
+            if (filterState) {
+                query += ' AND cp.state = ?';
+                queryParams.push(filterState);
             }
-            const totalItems = (_a = countResults[0]) === null || _a === void 0 ? void 0 : _a.totalItems;
-            res.json({ data: results, totalItems });
-        });
-    });
+            // Añade los límites de paginación
+            query += ' ORDER BY cp.email LIMIT ?, ?';
+            queryParams.push(offset, pageSize);
+            // Ejecuta la consulta principal
+            const [results] = yield db_1.default.promise().query(query, queryParams);
+            // Ejecuta la consulta para contar los elementos totales
+            const [countResults] = yield db_1.default.promise().query('SELECT FOUND_ROWS() AS totalItems');
+            const totalItems = ((_a = countResults[0]) === null || _a === void 0 ? void 0 : _a.totalItems) || 0;
+            // Confirma la transacción
+            db_1.default.commit((commitErr) => {
+                if (commitErr) {
+                    console.error('Error committing transaction:', commitErr);
+                    res.status(500).json({ error: 'An error occurred while committing the transaction' });
+                    return;
+                }
+                // Responde con los datos
+                res.json({ data: results, totalItems });
+            });
+        }
+        catch (error) {
+            // Deshacer la transacción en caso de error
+            db_1.default.rollback(() => {
+                console.error('Error during transaction:', error);
+                res.status(500).json({ error: 'An error occurred during the transaction' });
+            });
+        }
+    }));
 }));
 router.put('/updateStateContactProffesional', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {

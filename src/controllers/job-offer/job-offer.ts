@@ -2,7 +2,10 @@ import express from "express";
 import connection from "../../db/db";
 import bodyParser from "body-parser";
 import { ResultSetHeader } from "mysql2";
+import { RowDataPacket } from "mysql2";
 import decodeToken from "../../functions/decodeToken";
+const fs = require("fs");
+const path = require("path");
 
 const router = express.Router();
 router.use(bodyParser.json());
@@ -431,73 +434,33 @@ router.get("/getSalonsByUser/:id_user", (req, res) => {
   });
 });
 
-router.delete("/deleteJobOffer/:id_job_offer", (req, res) => {
-  const { id_job_offer } = req.params;
-
-  // Validar el ID
-  if (!id_job_offer || isNaN(Number(id_job_offer))) {
-    return res.status(400).json({ message: "ID de la oferta no válido." });
-  }
-
-  connection.beginTransaction((err) => {
-    if (err) {
-      console.error("Error al iniciar la transacción:", err);
-      return res.status(500).json({ message: "Error interno del servidor." });
-    }
-
-    const deleteOfferQuery = "DELETE FROM jobs_offers WHERE id_job_offer = ?";
-
-    // Cambiamos el tipo del resultado a ResultSetHeader
-    connection.query<ResultSetHeader>(
-      deleteOfferQuery,
-      [id_job_offer],
-      (queryErr, result) => {
-        if (queryErr) {
-          console.error("Error al eliminar la oferta de empleo:", queryErr);
-          return connection.rollback(() => {
-            res.status(500).json({ message: "Error interno del servidor." });
-          });
-        }
-
-        // Verificar si se eliminó alguna fila
-        if (result.affectedRows === 0) {
-          return connection.rollback(() => {
-            res
-              .status(404)
-              .json({ message: "Oferta de empleo no encontrada." });
-          });
-        }
-
-        // Confirmar la transacción
-        connection.commit((commitErr) => {
-          if (commitErr) {
-            console.error("Error al confirmar la transacción:", commitErr);
-            return connection.rollback(() => {
-              res.status(500).json({ message: "Error interno del servidor." });
-            });
-          }
-
-          return res
-            .status(200)
-            .json({ message: "Oferta de empleo eliminada con éxito." });
-        });
-      }
-    );
-  });
-});
-
 router.get("/getJobInscriptions/:id_job_offer", async (req, res) => {
   const jobId = req.params.id_job_offer;
-  //console.log('id_job_offer:', jobId);
+  const page = parseInt(req.query.page as string || '1', 10);
+  const pageSize = parseInt(req.query.pageSize as string || '4', 10); // Tamaño de página
+  const offset = (page - 1) * pageSize;
+
+  // Consulta principal con paginación
   const query = `
-      SELECT 
-    u.name AS user_name,
-    u.email AS user_email,
-    js.date_subscriptions,
-    js.path_curriculum
-FROM user_job_subscriptions js
-INNER JOIN user u ON js.id_user = u.id_user
-WHERE js.id_job_offer = ?;
+    SELECT 
+      u.name AS user_name,
+      u.lastname AS user_last_name,
+      u.email AS user_email,
+      js.id_user_job_subscriptions,
+      js.date_subscriptions,
+      js.path_curriculum,
+      js.work_presentation
+    FROM user_job_subscriptions js
+    INNER JOIN user u ON js.id_user = u.id_user
+    WHERE js.id_job_offer = ?
+    LIMIT ? OFFSET ?;
+  `;
+
+  // Consulta para contar el total de registros
+  const countQuery = `
+    SELECT COUNT(*) AS total
+    FROM user_job_subscriptions js
+    WHERE js.id_job_offer = ?;
   `;
 
   connection.beginTransaction((err) => {
@@ -507,7 +470,8 @@ WHERE js.id_job_offer = ?;
         .json({ error: "Error al iniciar la transacción", details: err });
     }
 
-    connection.query(query, [jobId], (error, results) => {
+    // Ejecutar la consulta principal con paginación
+    connection.query(query, [jobId, pageSize, offset], (error, results) => {
       if (error) {
         return connection.rollback(() => {
           res
@@ -516,25 +480,47 @@ WHERE js.id_job_offer = ?;
         });
       }
 
-      connection.commit((commitErr) => {
-        if (commitErr) {
+      // Ejecutar la consulta de conteo
+      connection.query(countQuery, [jobId], (countError, countResults: any) => {
+        if (countError) {
           return connection.rollback(() => {
             res
               .status(500)
-              .json({
-                error: "Error al confirmar la transacción",
-                details: commitErr,
-              });
+              .json({ error: "Error al contar los registros", details: countError });
           });
         }
 
-        res.status(200).json({
-          message: "Datos obtenidos con éxito",
-          data: results,
+        const totalRecords = countResults[0].total; // Total de registros
+        const totalPages = Math.ceil(totalRecords / pageSize); // Total de páginas
+
+        connection.commit((commitErr) => {
+          if (commitErr) {
+            return connection.rollback(() => {
+              res
+                .status(500)
+                .json({
+                  error: "Error al confirmar la transacción",
+                  details: commitErr,
+                });
+            });
+          }
+
+          // Responder con datos paginados y metainformación
+          res.status(200).json({
+            message: "Datos obtenidos con éxito",
+            data: results,
+            meta: {
+              currentPage: page,
+              pageSize: pageSize,
+              totalRecords: totalRecords,
+              totalPages: totalPages,
+            },
+          });
         });
       });
     });
   });
 });
+
 
 export default router;

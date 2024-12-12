@@ -13,33 +13,31 @@ const logoBase64 = fs.readFileSync(logoPath, 'base64');
 const logoUrl = `data:image/jpeg;base64,${logoBase64}`;
 
 router.get('/getAllMessageContact', async (req, res) => {
-
- const page = parseInt(req.query.page as string || '1', 10);
+  const page = parseInt(req.query.page as string || '1', 10);
   const pageSize = parseInt(req.query.pageSize as string || '10', 10);
   const offset = (page - 1) * pageSize;
   const search = req.query.search ? `%${req.query.search}%` : '%%';
-  const filterState = req.query.filterState ? req.query.filterState.toString() : '%%';
+  const filterState = req.query.filterState ? req.query.filterState.toString() : null;
 
-  // Inicializa la consulta base y los parámetros de la consulta
+  //console.log("Filter State:", filterState);
+
+  // Consulta para obtener los datos paginados
   let query = `
-    SELECT SQL_CALC_FOUND_ROWS * 
+    SELECT * 
     FROM contact 
-    WHERE (name LIKE ? OR email LIKE ? OR phone LIKE ? OR text LIKE ?) ORDER BY email 
+    WHERE (name LIKE ? OR email LIKE ? OR phone LIKE ? OR text LIKE ?)
   `;
   const queryParams: any[] = [search, search, search, search];
 
-  // Aplica los filtros si están presentes
- 
-  if (filterState && filterState !== '%%') {
+  if (filterState) {
     query += ' AND state = ?';
     queryParams.push(filterState);
   }
 
-  // Añade los límites de paginación
-  query += ' LIMIT ?, ?';
+  query += ' ORDER BY email LIMIT ?, ?';
   queryParams.push(offset, pageSize);
 
-  // Ejecuta la consulta principal
+  // Ejecutar la consulta principal
   connection.query(query, queryParams, (error, results) => {
     if (error) {
       console.error('Error fetching data:', error);
@@ -47,25 +45,44 @@ router.get('/getAllMessageContact', async (req, res) => {
       return;
     }
 
-    // Ejecuta la consulta para contar los elementos totales
-    connection.query('SELECT FOUND_ROWS() AS totalItems', (countError, countResults) => {
+    // Consulta para contar el total de elementos
+    let countQuery = `
+      SELECT COUNT(*) AS totalItems 
+      FROM contact 
+      WHERE (name LIKE ? OR email LIKE ? OR phone LIKE ? OR text LIKE ?)
+    `;
+    const countParams: any[] = [search, search, search, search];
+
+    if (filterState) {
+      countQuery += ' AND state = ?';
+      countParams.push(filterState);
+    }
+
+    // Ejecutar la consulta para obtener el total de elementos
+    connection.query(countQuery, countParams, (countError, countResults: RowDataPacket[]) => {
       if (countError) {
         console.error('Error fetching count:', countError);
         res.status(500).json({ error: 'An error occurred while fetching data count' });
         return;
       }
 
-      const totalItems = (countResults as RowDataPacket[])[0]?.totalItems;
+      // Ahora countResults[0] será reconocido como un objeto con las propiedades esperadas
+      const totalItems = countResults[0]?.totalItems || 0;
+
+      // Responder con los datos paginados y el conteo total
       res.json({ data: results, totalItems });
+      //console.log("Total Items:", totalItems);
+      //console.log("Results:", results);
     });
   });
 });
+
 
 router.put('/updateStateContact', async (req, res) => {
   try {
     const { id_contact, state } = req.body;
 
-     //console.log(req.body);
+    //console.log(req.body);
     // Validación de los datos
     if (!id_contact) {
       return res.status(400).json({ error: 'Missing id_contact' });
@@ -114,7 +131,7 @@ const transporter = nodemailer.createTransport({
 });
 
 router.post('/send-reply-contact', async (req, res) => {
-  const {id_contact, to, subject, message,replyMessage } = req.body;
+  const { id_contact, to, subject, message, replyMessage } = req.body;
   //console.log(id_contact,replyMessage);
 
   // Configuración del correo a enviar
@@ -136,7 +153,7 @@ router.post('/send-reply-contact', async (req, res) => {
         <img src="${logoUrl}" alt="Logo de Mis Peluquerías" style="width: 400px; border-radius: 4px;box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); margin-bottom: 20px;" />
       </div>
     `,
-  }; 
+  };
 
   try {
     // Enviar el correo
@@ -164,7 +181,7 @@ router.post('/send-reply-contact', async (req, res) => {
 
 router.post('/send-new-email-contact', async (req, res) => {
   const { to, subject, message } = req.body;
-  
+
   // Configuración del correo a enviar
   const mailOptions = {
     from: '"mispeluquerias.com" <comunicaciones@mispeluquerias.com>', // Remitente
@@ -175,8 +192,8 @@ router.post('/send-new-email-contact', async (req, res) => {
       <p>${message}</p>
       <p>Por favor, no respondas directamente a este correo.</p>
       <p>Para responder, visita nuestra plataforma en 
-         <a href="https://www.mispeluquerias.com/profesionales" target="_blank" style="color: #007bff; text-decoration: underline;">
-          www.mispeluquerias.com/profesionales
+         <a href="https://www.mispeluquerias.com/contacto" target="_blank" style="color: #007bff; text-decoration: underline;">
+          www.mispeluquerias.com/contacto
         </a>.
       </p>
       <p>Atentamente el equipo de soporte de mispeluquerias.com</p>
@@ -226,7 +243,7 @@ router.post('/deleteContacts', (req, res) => {
           res.status(500).json({ message: 'Error al eliminar los contactos.', error });
         });
       }
-    
+
       // Confirmamos la transacción si todo va bien
       connection.commit((commitErr: any) => {
         if (commitErr) {
@@ -236,11 +253,11 @@ router.post('/deleteContacts', (req, res) => {
             res.status(500).json({ message: 'Error al confirmar la transacción.', error: commitErr });
           });
         }
-    
+
         // Si todo sale bien, enviamos la respuesta de éxito
         res.status(200).json({ message: 'Contactos eliminados con éxito.', affectedRows: results.affectedRows });
       });
-    });    
+    });
   });
 });
 

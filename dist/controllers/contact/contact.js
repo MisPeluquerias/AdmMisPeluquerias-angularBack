@@ -27,39 +27,53 @@ router.get('/getAllMessageContact', (req, res) => __awaiter(void 0, void 0, void
     const pageSize = parseInt(req.query.pageSize || '10', 10);
     const offset = (page - 1) * pageSize;
     const search = req.query.search ? `%${req.query.search}%` : '%%';
-    const filterState = req.query.filterState ? req.query.filterState.toString() : '%%';
-    // Inicializa la consulta base y los parámetros de la consulta
+    const filterState = req.query.filterState ? req.query.filterState.toString() : null;
+    //console.log("Filter State:", filterState);
+    // Consulta para obtener los datos paginados
     let query = `
-    SELECT SQL_CALC_FOUND_ROWS * 
+    SELECT * 
     FROM contact 
-    WHERE (name LIKE ? OR email LIKE ? OR phone LIKE ? OR text LIKE ?) ORDER BY email 
+    WHERE (name LIKE ? OR email LIKE ? OR phone LIKE ? OR text LIKE ?)
   `;
     const queryParams = [search, search, search, search];
-    // Aplica los filtros si están presentes
-    if (filterState && filterState !== '%%') {
+    if (filterState) {
         query += ' AND state = ?';
         queryParams.push(filterState);
     }
-    // Añade los límites de paginación
-    query += ' LIMIT ?, ?';
+    query += ' ORDER BY email LIMIT ?, ?';
     queryParams.push(offset, pageSize);
-    // Ejecuta la consulta principal
+    // Ejecutar la consulta principal
     db_1.default.query(query, queryParams, (error, results) => {
         if (error) {
             console.error('Error fetching data:', error);
             res.status(500).json({ error: 'An error occurred while fetching data' });
             return;
         }
-        // Ejecuta la consulta para contar los elementos totales
-        db_1.default.query('SELECT FOUND_ROWS() AS totalItems', (countError, countResults) => {
+        // Consulta para contar el total de elementos
+        let countQuery = `
+      SELECT COUNT(*) AS totalItems 
+      FROM contact 
+      WHERE (name LIKE ? OR email LIKE ? OR phone LIKE ? OR text LIKE ?)
+    `;
+        const countParams = [search, search, search, search];
+        if (filterState) {
+            countQuery += ' AND state = ?';
+            countParams.push(filterState);
+        }
+        // Ejecutar la consulta para obtener el total de elementos
+        db_1.default.query(countQuery, countParams, (countError, countResults) => {
             var _a;
             if (countError) {
                 console.error('Error fetching count:', countError);
                 res.status(500).json({ error: 'An error occurred while fetching data count' });
                 return;
             }
-            const totalItems = (_a = countResults[0]) === null || _a === void 0 ? void 0 : _a.totalItems;
+            // Ahora countResults[0] será reconocido como un objeto con las propiedades esperadas
+            const totalItems = ((_a = countResults[0]) === null || _a === void 0 ? void 0 : _a.totalItems) || 0;
+            // Responder con los datos paginados y el conteo total
             res.json({ data: results, totalItems });
+            //console.log("Total Items:", totalItems);
+            //console.log("Results:", results);
         });
     });
 }));
@@ -162,8 +176,8 @@ router.post('/send-new-email-contact', (req, res) => __awaiter(void 0, void 0, v
       <p>${message}</p>
       <p>Por favor, no respondas directamente a este correo.</p>
       <p>Para responder, visita nuestra plataforma en 
-         <a href="https://www.mispeluquerias.com/profesionales" target="_blank" style="color: #007bff; text-decoration: underline;">
-          www.mispeluquerias.com/profesionales
+         <a href="https://www.mispeluquerias.com/contacto" target="_blank" style="color: #007bff; text-decoration: underline;">
+          www.mispeluquerias.com/contacto
         </a>.
       </p>
       <p>Atentamente el equipo de soporte de mispeluquerias.com</p>
